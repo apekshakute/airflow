@@ -576,7 +576,7 @@ class KubernetesExecutor(BaseExecutor, LoggingMixin):
                 return self.kube_client.create_namespaced_secret(
                     self.kube_config.executor_namespace, kubernetes.client.V1Secret(
                         data={
-                            'key.json': base64.b64encode(open(secret_path, 'r').read())},
+                            'key.json': base64.b64encode(open(secret_path, 'rb').read()).decode()},
                         metadata=kubernetes.client.V1ObjectMeta(name=secret_name)))
             except ApiException as e:
                 if e.status == 409:
@@ -584,7 +584,7 @@ class KubernetesExecutor(BaseExecutor, LoggingMixin):
                         secret_name, self.kube_config.executor_namespace,
                         kubernetes.client.V1Secret(
                             data={'key.json': base64.b64encode(
-                                open(secret_path, 'r').read())},
+                                open(secret_path, 'rb').read()).decode()},
                             metadata=kubernetes.client.V1ObjectMeta(name=secret_name)))
                 self.log.exception(
                     'Exception while trying to inject secret. '
@@ -624,6 +624,21 @@ class KubernetesExecutor(BaseExecutor, LoggingMixin):
         self.clear_not_launched_queued_tasks()
 
     def execute_async(self, key, command, queue=None, executor_config=None):
+        if self.kube_config.git_dags_folder_mount_point:
+            work_dag_folder_lst = [self.kube_config.git_dags_folder_mount_point]
+            if self.kube_config.git_sync_dest:
+                work_dag_folder_lst.append(self.kube_config.git_sync_dest)
+            if self.kube_config.git_subpath:
+                work_dag_folder_lst.append(self.kube_config.git_subpath)
+            worker_dag_folder = '/'.join(work_dag_folder_lst)
+
+            self.log.info(
+                'Using git-sync, change dag_folder from %s to %s',
+                self.kube_config.dags_folder,
+                worker_dag_folder
+            )
+            command = command.replace('-sd ' + self.kube_config.dags_folder, '-sd ' + worker_dag_folder)
+
         self.log.info(
             'Add task %s with command %s with executor_config %s',
             key, command, executor_config
