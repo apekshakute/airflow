@@ -60,7 +60,7 @@ class PodLauncher(LoggingMixin):
             raise
         return resp
 
-    def delete_pod(self, pod):
+    def delete_pod(self, pod): #TODO: RETRY
         try:
             self._client.delete_namespaced_pod(
                 pod.name, pod.namespace, body=client.V1DeleteOptions())
@@ -101,7 +101,7 @@ class PodLauncher(LoggingMixin):
                 follow=True,
                 tail_lines=10,
                 _preload_content=False)
-            for line in logs:
+            for line in logs: #TODO: RETRY
                 self.log.info(line)
         result = None
         if self.extract_xcom:
@@ -137,7 +137,7 @@ class PodLauncher(LoggingMixin):
                                   event.status.container_statuses)), None)
         return status.state.running is not None
 
-    def read_pod(self, pod):
+    def read_pod(self, pod): #TODO: RETRY
         try:
             return self._client.read_namespaced_pod(pod.name, pod.namespace)
         except HTTPError as e:
