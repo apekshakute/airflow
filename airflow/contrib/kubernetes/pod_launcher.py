@@ -155,7 +155,7 @@ class PodLauncher(LoggingMixin):
         try:
             result = self._exec_pod_command(
                 resp, 'cat {}/return.json'.format(self.kube_req_factory.XCOM_MOUNT_PATH))
-            self._exec_pod_command(resp, 'kill -s SIGINT 1') # Ignore sidecar container error when exiting
+            self._exec_pod_command(resp, 'kill -s SIGINT $(pidof python)') # Ignore sidecar container error when exiting
         finally:
             resp.close()
         if result is None:
