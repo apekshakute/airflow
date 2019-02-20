@@ -42,7 +42,7 @@ from pandas_gbq import read_gbq
 from pandas_gbq.gbq import \
     _test_google_api_imports as gbq_test_google_api_imports
 from pandas_gbq.gbq import GbqConnector
-
+from google.cloud import bigquery
 
 class BigQueryHook(GoogleCloudBaseHook, DbApiHook, LoggingMixin):
     """
@@ -140,6 +140,26 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook, LoggingMixin):
             if e.resp['status'] == '404':
                 return False
             raise
+    def table_list_partition(self, project_id, dataset_id, table_id):
+        """
+        Return full partition list a table in Google BigQuery.
+
+        :param project_id: The Google cloud project in which to look for the
+            table. The connection supplied to the hook must provide access to
+            the specified project.
+        :type project_id: string
+        :param dataset_id: The name of the dataset in which to look for the
+            table.
+        :type dataset_id: string
+        :param table_id: The name of the table to check the existence of.
+        :type table_id: string
+        """
+
+        client = bigquery.Client(project=project_id,
+                                 credentials=self._get_credentials())
+        ds = client.dataset(dataset_id, project = project_id)
+        table = ds.table(table_id)
+        return client.list_partitions(table)
 
 
 class BigQueryPandasConnector(GbqConnector):
