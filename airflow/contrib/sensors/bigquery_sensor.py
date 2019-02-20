@@ -68,3 +68,55 @@ class BigQueryTableSensor(BaseSensorOperator):
             bigquery_conn_id=self.bigquery_conn_id,
             delegate_to=self.delegate_to)
         return hook.table_exists(self.project_id, self.dataset_id, self.table_id)
+
+
+class BigQueryTablePartitionSensor(BaseSensorOperator):
+    """
+    Checks for the existence of a table in Google Bigquery.
+
+        :param project_id: The Google cloud project in which to look for the table.
+            The connection supplied to the hook must provide
+            access to the specified project.
+        :type project_id: string
+        :param dataset_id: The name of the dataset in which to look for the table.
+            storage bucket.
+        :type dataset_id: string
+        :param table_id: The name of the table to check the existence of.
+        :type table_id: string
+        :param expected_partition: The expected_partition of a table in the format of YYYYMMDD
+        :type expected_partition: string
+        :param bigquery_conn_id: The connection ID to use when connecting to
+            Google BigQuery.
+        :type bigquery_conn_id: string
+        :param delegate_to: The account to impersonate, if any.
+            For this to work, the service account making the request must
+            have domain-wide delegation enabled.
+        :type delegate_to: string
+    """
+    template_fields = ('project_id', 'dataset_id', 'table_id',)
+    ui_color = '#ff4dff'
+
+    @apply_defaults
+    def __init__(self,
+                 project_id,
+                 dataset_id,
+                 table_id,
+                 expected_partition,
+                 bigquery_conn_id='bigquery_default',
+                 delegate_to=None,
+                 *args, **kwargs):
+        super(BigQueryTablePartitionSensor, self).__init__(*args, **kwargs)
+        self.project_id = project_id
+        self.dataset_id = dataset_id
+        self.table_id = table_id
+        self.expected_partition = expected_partition
+        self.bigquery_conn_id = bigquery_conn_id
+        self.delegate_to = delegate_to
+
+    def poke(self, context):
+        table_uri = '{0}:{1}.{2}'.format(self.project_id, self.dataset_id, self.table_id)
+        self.log.info('Sensor checks if the partition %s exists of table: %s', self.expected_partition, table_uri)
+        hook = BigQueryHook(
+            bigquery_conn_id=self.bigquery_conn_id,
+            delegate_to=self.delegate_to)
+        return self.expected_partition in hook.table_list_partition(self.project_id, self.dataset_id, self.table_id)
