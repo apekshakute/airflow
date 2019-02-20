@@ -53,7 +53,6 @@ class BigQueryTableSensor(BaseSensorOperator):
                  bigquery_conn_id='bigquery_default',
                  delegate_to=None,
                  *args, **kwargs):
-
         super(BigQueryTableSensor, self).__init__(*args, **kwargs)
         self.project_id = project_id
         self.dataset_id = dataset_id
