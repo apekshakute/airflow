@@ -113,7 +113,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook, LoggingMixin):
 
         return read_gbq(sql,
                         project_id=self._get_field('project'),
-                        dialect=dialect,
+                        dialect=dialect, credentials=self._get_credentials(),
                         verbose=False)
 
     def table_exists(self, project_id, dataset_id, table_id):
