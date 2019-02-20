@@ -142,7 +142,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook, LoggingMixin):
             raise
     def table_list_partition(self, project_id, dataset_id, table_id):
         """
-        Return full partition list a table in Google BigQuery.
+        Return full partition list of a table in Google BigQuery.
 
         :param project_id: The Google cloud project in which to look for the
             table. The connection supplied to the hook must provide access to
@@ -153,6 +153,8 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook, LoggingMixin):
         :type dataset_id: string
         :param table_id: The name of the table to check the existence of.
         :type table_id: string
+        :return Full partition list of a table in Google BigQuery in format of YYYYMMDD
+        :rtype list of string
         """
 
         client = bigquery.Client(project=project_id,
