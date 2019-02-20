@@ -161,6 +161,30 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook, LoggingMixin):
         table = ds.table(table_id)
         return client.list_partitions(table)
 
+    def table_last_modified(self,  project_id, dataset_id, table_id):
+        """
+        Return full partition list a table in Google BigQuery.
+
+        :param project_id: The Google cloud project in which to look for the
+            table. The connection supplied to the hook must provide access to
+            the specified project.
+        :type project_id: string
+        :param dataset_id: The name of the dataset in which to look for the
+            table.
+        :type dataset_id: string
+        :param table_id: The name of the table to check the existence of.
+        :type table_id: string
+        :return last_modified of a table in UTC
+        :rtype datetime.datetime
+        """
+        client = bigquery.Client(project=project_id,
+                                 credentials=self._get_credentials())
+        ds_ref = client.dataset(dataset_id, project=project_id)
+        table_ref = ds_ref.table(table_id)
+        table = client.get_table(table_ref)
+        return table.modified
+
+
 
 class BigQueryPandasConnector(GbqConnector):
     """
