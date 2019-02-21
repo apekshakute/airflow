@@ -92,7 +92,7 @@ class BigQueryTablePartitionSensor(BaseSensorOperator):
             have domain-wide delegation enabled.
         :type delegate_to: string
     """
-    template_fields = ('project_id', 'dataset_id', 'table_id',)
+    template_fields = ('project_id', 'dataset_id', 'table_id', 'expected_partition')
     ui_color = '#ff4dff'
 
     @apply_defaults
