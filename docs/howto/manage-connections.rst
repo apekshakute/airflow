@@ -28,7 +28,7 @@ will author will reference the 'conn_id' of the Connection objects.
 Connections can be created and managed using either the UI or environment
 variables.
 
-See the :ref:`Connenctions Concepts <concepts-connections>` documentation for
+See the :ref:`Connections Concepts <concepts-connections>` documentation for
 more information.
 
 Creating a Connection with the UI
@@ -70,10 +70,15 @@ When referencing the connection in the Airflow pipeline, the ``conn_id``
 should be the name of the variable without the prefix. For example, if the
 ``conn_id`` is named ``postgres_master`` the environment variable should be
 named ``AIRFLOW_CONN_POSTGRES_MASTER`` (note that the environment variable
-must be all uppercase). Airflow assumes the value returned from the
-environment variable to be in a URI format (e.g.
-``postgres://user:password@localhost:5432/master`` or
-``s3://accesskey:secretkey@S3``).
+must be all uppercase).
+
+Airflow assumes the value returned from the environment variable to be in a URI
+format (e.g.``postgres://user:password@localhost:5432/master`` or
+``s3://accesskey:secretkey@S3``). The underscore character is not allowed
+in the scheme part of URI, so it must be changed to a hyphen character
+(e.g. `google-compute-platform` if `conn_type` is `google_compute_platform`).
+Query parameters are parsed to one-dimensional dict and then used to fill extra.
+
 
 .. _manage-connections-connection-types:
 
@@ -150,6 +155,75 @@ Scopes (comma separated)
         Scopes are ignored when using application default credentials. See
         issue `AIRFLOW-2522
         <https://issues.apache.org/jira/browse/AIRFLOW-2522>`_.
+
+    When specifying the connection in environment variable you should specify
+    it using URI syntax, with the following requirements:
+
+      * scheme part should be equals ``google-cloud-platform`` (Note: look for a
+        hyphen character)
+      * authority (username, password, host, port), path is ignored
+      * query parameters contains information specific to this type of
+        connection. The following keys are accepted:
+
+        * ``extra__google_cloud_platform__project`` - Project Id
+        * ``extra__google_cloud_platform__key_path`` - Keyfile Path
+        * ``extra__google_cloud_platform__key_dict`` - Keyfile JSON
+        * ``extra__google_cloud_platform__scope`` - Scopes
+
+    Note that all components of the URI should be URL-encoded.
+
+    For example:
+
+    .. code-block:: bash
+
+       google-cloud-platform://?extra__google_cloud_platform__key_path=%2Fkeys%2Fkey.json&extra__google_cloud_platform__scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&extra__google_cloud_platform__project=airflow
+
+Amazon Web Services
+~~~~~~~~~~~~~~~~~~~
+
+The Amazon Web Services connection type enables the :ref:`AWS Integrations
+<AWS>`.
+
+Authenticating to AWS
+'''''''''''''''''''''
+
+Authentication may be performed using any of the `boto3 options <https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html#configuring-credentials>`_. Alternatively, one can pass credentials in as a Connection initialisation parameter.
+
+To use IAM instance profile, create an "empty" connection (i.e. one with no Login or Password specified).
+
+Default Connection IDs
+''''''''''''''''''''''
+
+The default connection ID is ``aws_default``.
+
+Configuring the Connection
+''''''''''''''''''''''''''
+
+Login (optional)
+    Specify the AWS access key ID.
+
+Password (optional)
+    Specify the AWS secret access key.
+
+Extra (optional)
+    Specify the extra parameters (as json dictionary) that can be used in AWS
+    connection. The following parameters are supported:
+
+    * **aws_account_id**: AWS account ID for the connection
+    * **aws_iam_role**: AWS IAM role for the connection
+    * **external_id**: AWS external ID for the connection
+    * **host**: Endpoint URL for the connection
+    * **region_name**: AWS region for the connection
+    * **role_arn**: AWS role ARN for the connection
+
+    Example "extras" field:
+
+    .. code-block:: json
+
+       {
+          "aws_iam_role": "aws_iam_role_name",
+          "region_name": "ap-southeast-2"
+       }
 
 MySQL
 ~~~~~
