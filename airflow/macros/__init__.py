@@ -24,7 +24,35 @@ from random import random # noqa
 import time # noqa
 from . import hive # noqa
 import uuid # noqa
+import pendulum
 
+def ts_local(ts, tz):
+    '''
+    Convert utc date string to local date string in the format of YYYY-MM-DD
+
+    :param ds: UTC ts in isoformat Example: 2018-01-01T00:00:00+00:00
+    :type ds: string
+    :param tz: pendulum timezong string
+    :type tz: string
+    :return: LOCAL date in ``%Y-%m-%dT%H:%M:%S``
+    :rtype: string
+    '''
+    ret_ts = dateutil.parser.parse(ts).astimezone(tz=pendulum.timezone(tz))
+    return ret_ts.isoformat()[:19]
+
+def ds_local(ts, tz):
+    '''
+    Convert utc date string to local date string in the format of YYYY-MM-DD
+
+    :param ds: UTC ts in isoformat Example: 2018-01-01T00:00:00+00:00
+    :type ds: string
+    :param tz: pendulum timezong string
+    :type tz: string
+    :return: LOCAL date in ``%Y-%m-%d``
+    :rtype: string
+    '''
+    ret_ts = dateutil.parser.parse(ts).astimezone(tz=pendulum.timezone(tz))
+    return ret_ts.isoformat()[:10]
 
 def ds_add(ds, days):
     """
