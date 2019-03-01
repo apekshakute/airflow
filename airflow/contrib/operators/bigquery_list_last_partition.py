@@ -36,7 +36,7 @@ class BigQueryListLastPartitionOperator(BaseOperator):
         where latest_partition_time time is in format of YYYYMMDD
     :rtype dict
     """
-    template_fields = ('table_lst')
+    template_fields = ('table_lst',)
     ui_color = '#e4f0e8'
 
     @apply_defaults
@@ -52,9 +52,7 @@ class BigQueryListLastPartitionOperator(BaseOperator):
         self.delegate_to = delegate_to
 
     def execute(self, context):
-        self.log.info('Fetching Data from:')
-        self.log.info('Dataset: %s ; Table: %s ; Max Results: %s',
-                      self.dataset_id, self.table_id, self.max_results)
+        self.log.info('Fetching last partition from tables: {}'.format(str(self.table_lst)))
         hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id,
                             delegate_to=self.delegate_to)
         return_dict = {}
@@ -62,5 +60,7 @@ class BigQueryListLastPartitionOperator(BaseOperator):
             project = each_table.split(':')[0]
             dataset = each_table.split(':')[1].split('.')[0]
             table_name = each_table.split(':')[1].split('.')[1]
-            return_dict[each_table] = sorted(hook.table_list_partition(project, dataset, table_name))[-1]
+            lp = sorted(hook.table_list_partition(project, dataset, table_name))[-1]
+            return_dict[each_table] = lp
+            self.log.info("Table {} has latest partition: {}".format(each_table, lp))
         return return_dict
