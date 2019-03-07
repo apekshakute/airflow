@@ -179,6 +179,7 @@ gcp_api = [
     'google-cloud-bigtable==0.31.0',
     'google-cloud-spanner>=1.7.1',
     'google-cloud-bigquery>=0.28.0',
+    'google-cloud-storage==1.10.0',
     'grpcio-gcp>=0.2.2',
     'PyOpenSSL',
     'pandas-gbq'
