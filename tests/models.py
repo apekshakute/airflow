@@ -31,14 +31,17 @@ import textwrap
 import time
 import unittest
 import urllib
+import uuid
 from tempfile import NamedTemporaryFile, mkdtemp
 
 import pendulum
 import six
 from mock import ANY, Mock, patch
 from parameterized import parameterized
+from freezegun import freeze_time
 
 from airflow import AirflowException, configuration, models, settings
+from airflow.contrib.sensors.python_sensor import PythonSensor
 from airflow.exceptions import AirflowDagCycleException, AirflowSkipException
 from airflow.jobs import BackfillJob
 from airflow.models import Connection
@@ -47,6 +50,7 @@ from airflow.models import DagModel, DagRun, DagStat
 from airflow.models import KubeResourceVersion, KubeWorkerIdentifier
 from airflow.models import SkipMixin
 from airflow.models import State as ST
+from airflow.models import TaskReschedule as TR
 from airflow.models import XCom
 from airflow.models import clear_task_instances
 from airflow.operators.bash_operator import BashOperator
@@ -391,6 +395,122 @@ class DagTest(unittest.TestCase):
 
         result = task.render_template('', '{{ foo }}', dict(foo='bar'))
         self.assertEqual(result, 'bar')
+
+    def test_render_template_list_field(self):
+        """Tests if render_template from a list field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        self.assertListEqual(
+            task.render_template('', ['{{ foo }}_1', '{{ foo }}_2'], {'foo': 'bar'}),
+            ['bar_1', 'bar_2']
+        )
+
+    def test_render_template_tuple_field(self):
+        """Tests if render_template from a tuple field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        # tuple is replaced by a list
+        self.assertListEqual(
+            task.render_template('', ('{{ foo }}_1', '{{ foo }}_2'), {'foo': 'bar'}),
+            ['bar_1', 'bar_2']
+        )
+
+    def test_render_template_dict_field(self):
+        """Tests if render_template from a dict field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        self.assertDictEqual(
+            task.render_template('', {'key1': '{{ foo }}_1', 'key2': '{{ foo }}_2'}, {'foo': 'bar'}),
+            {'key1': 'bar_1', 'key2': 'bar_2'}
+        )
+
+    def test_render_template_dict_field_with_templated_keys(self):
+        """Tests if render_template from a dict field works as expected:
+        dictionary keys are not templated"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        self.assertDictEqual(
+            task.render_template('', {'key_{{ foo }}_1': 1, 'key_2': '{{ foo }}_2'}, {'foo': 'bar'}),
+            {'key_{{ foo }}_1': 1, 'key_2': 'bar_2'}
+        )
+
+    def test_render_template_date_field(self):
+        """Tests if render_template from a date field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        self.assertEqual(
+            task.render_template('', datetime.date(2018, 12, 6), {'foo': 'bar'}),
+            datetime.date(2018, 12, 6)
+        )
+
+    def test_render_template_datetime_field(self):
+        """Tests if render_template from a datetime field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        self.assertEqual(
+            task.render_template('', datetime.datetime(2018, 12, 6, 10, 55), {'foo': 'bar'}),
+            datetime.datetime(2018, 12, 6, 10, 55)
+        )
+
+    def test_render_template_UUID_field(self):
+        """Tests if render_template from a UUID field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        random_uuid = uuid.uuid4()
+        self.assertIs(
+            task.render_template('', random_uuid, {'foo': 'bar'}),
+            random_uuid
+        )
+
+    def test_render_template_object_field(self):
+        """Tests if render_template from an object field works"""
+
+        dag = DAG('test-dag',
+                  start_date=DEFAULT_DATE)
+
+        with dag:
+            task = DummyOperator(task_id='op1')
+
+        test_object = object()
+        self.assertIs(
+            task.render_template('', test_object, {'foo': 'bar'}),
+            test_object
+        )
 
     def test_render_template_field_macro(self):
         """ Tests if render_template from a field works,
@@ -1343,12 +1463,19 @@ class DagRunTest(unittest.TestCase):
 
 
 class DagBagTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.empty_dir = mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        os.rmdir(cls.empty_dir)
 
     def test_get_existing_dag(self):
         """
         test that were're able to parse some example DAGs and retrieve them
         """
-        dagbag = models.DagBag(include_examples=True)
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=True)
 
         some_expected_dag_ids = ["example_bash_operator",
                                  "example_branch_operator"]
@@ -1365,10 +1492,18 @@ class DagBagTest(unittest.TestCase):
         """
         test that retrieving a non existing dag id returns None without crashing
         """
-        dagbag = models.DagBag(include_examples=True)
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
 
         non_existing_dag_id = "non_existing_dag_id"
         self.assertIsNone(dagbag.get_dag(non_existing_dag_id))
+
+    def test_dont_load_example(self):
+        """
+        test that the example are not loaded
+        """
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
+
+        self.assertEqual(dagbag.size(), 0)
 
     def test_process_file_that_contains_multi_bytes_char(self):
         """
@@ -1378,7 +1513,7 @@ class DagBagTest(unittest.TestCase):
         f.write('\u3042'.encode('utf8'))  # write multi-byte char (hiragana)
         f.flush()
 
-        dagbag = models.DagBag(include_examples=True)
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
         self.assertEqual([], dagbag.process_file(f.name))
 
     def test_zip_skip_log(self):
@@ -1400,7 +1535,7 @@ class DagBagTest(unittest.TestCase):
         """
         test the loading of a DAG within a zip file that includes dependencies
         """
-        dagbag = models.DagBag()
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
         dagbag.process_file(os.path.join(TEST_DAGS_FOLDER, "test_zip.zip"))
         self.assertTrue(dagbag.get_dag("test_zip_dag"))
 
@@ -1410,7 +1545,7 @@ class DagBagTest(unittest.TestCase):
         as schedule interval can be identified
         """
         invalid_dag_files = ["test_invalid_cron.py", "test_zip_invalid_cron.zip"]
-        dagbag = models.DagBag(dag_folder=mkdtemp())
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
 
         self.assertEqual(len(dagbag.import_errors), 0)
         for d in invalid_dag_files:
@@ -1474,7 +1609,7 @@ class DagBagTest(unittest.TestCase):
         f.write(source.encode('utf8'))
         f.flush()
 
-        dagbag = models.DagBag(include_examples=False)
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
         found_dags = dagbag.process_file(f.name)
         return dagbag, found_dags, f.name
 
@@ -1785,7 +1920,7 @@ class DagBagTest(unittest.TestCase):
         """
         test that process_file can handle Nones
         """
-        dagbag = models.DagBag(include_examples=True)
+        dagbag = models.DagBag(dag_folder=self.empty_dir, include_examples=False)
 
         self.assertEqual([], dagbag.process_file(None))
 
@@ -1840,6 +1975,12 @@ class DagBagTest(unittest.TestCase):
 
 
 class TaskInstanceTest(unittest.TestCase):
+
+    def tearDown(self):
+        with create_session() as session:
+            session.query(models.TaskFail).delete()
+            session.query(models.TaskReschedule).delete()
+            session.query(models.TaskInstance).delete()
 
     def test_set_task_dates(self):
         """
@@ -2210,6 +2351,102 @@ class TaskInstanceTest(unittest.TestCase):
         ti.try_number = 50
         dt = ti.next_retry_datetime()
         self.assertEqual(dt, ti.end_date + max_delay)
+
+    @patch.object(TI, 'pool_full')
+    def test_reschedule_handling(self, mock_pool_full):
+        """
+        Test that task reschedules are handled properly
+        """
+        # Mock the pool with a pool with slots open since the pool doesn't actually exist
+        mock_pool_full.return_value = False
+
+        # Return values of the python sensor callable, modified during tests
+        done = False
+        fail = False
+
+        def callable():
+            if fail:
+                raise AirflowException()
+            return done
+
+        dag = models.DAG(dag_id='test_reschedule_handling')
+        task = PythonSensor(
+            task_id='test_reschedule_handling_sensor',
+            poke_interval=0,
+            mode='reschedule',
+            python_callable=callable,
+            retries=1,
+            retry_delay=datetime.timedelta(seconds=0),
+            dag=dag,
+            owner='airflow',
+            start_date=timezone.datetime(2016, 2, 1, 0, 0, 0))
+
+        ti = TI(task=task, execution_date=timezone.utcnow())
+        self.assertEqual(ti._try_number, 0)
+        self.assertEqual(ti.try_number, 1)
+
+        def run_ti_and_assert(run_date, expected_start_date, expected_end_date, expected_duration,
+                              expected_state, expected_try_number, expected_task_reschedule_count):
+            with freeze_time(run_date):
+                try:
+                    ti.run()
+                except AirflowException:
+                    if not fail:
+                        raise
+            ti.refresh_from_db()
+            self.assertEqual(ti.state, expected_state)
+            self.assertEqual(ti._try_number, expected_try_number)
+            self.assertEqual(ti.try_number, expected_try_number + 1)
+            self.assertEqual(ti.start_date, expected_start_date)
+            self.assertEqual(ti.end_date, expected_end_date)
+            self.assertEqual(ti.duration, expected_duration)
+            trs = TR.find_for_task_instance(ti)
+            self.assertEqual(len(trs), expected_task_reschedule_count)
+
+        date1 = timezone.utcnow()
+        date2 = date1 + datetime.timedelta(minutes=1)
+        date3 = date2 + datetime.timedelta(minutes=1)
+        date4 = date3 + datetime.timedelta(minutes=1)
+
+        # Run with multiple reschedules.
+        # During reschedule the try number remains the same, but each reschedule is recorded.
+        # The start date is expected to remain the inital date, hence the duration increases.
+        # When finished the try number is incremented and there is no reschedule expected
+        # for this try.
+
+        done, fail = False, False
+        run_ti_and_assert(date1, date1, date1, 0, State.UP_FOR_RESCHEDULE, 0, 1)
+
+        done, fail = False, False
+        run_ti_and_assert(date2, date1, date2, 60, State.UP_FOR_RESCHEDULE, 0, 2)
+
+        done, fail = False, False
+        run_ti_and_assert(date3, date1, date3, 120, State.UP_FOR_RESCHEDULE, 0, 3)
+
+        done, fail = True, False
+        run_ti_and_assert(date4, date1, date4, 180, State.SUCCESS, 1, 0)
+
+        # Clear the task instance.
+        dag.clear()
+        ti.refresh_from_db()
+        self.assertEqual(ti.state, State.NONE)
+        self.assertEqual(ti._try_number, 1)
+
+        # Run again after clearing with reschedules and a retry.
+        # The retry increments the try number, and for that try no reschedule is expected.
+        # After the retry the start date is reset, hence the duration is also reset.
+
+        done, fail = False, False
+        run_ti_and_assert(date1, date1, date1, 0, State.UP_FOR_RESCHEDULE, 1, 1)
+
+        done, fail = False, True
+        run_ti_and_assert(date2, date1, date2, 60, State.UP_FOR_RETRY, 2, 0)
+
+        done, fail = False, False
+        run_ti_and_assert(date3, date3, date3, 0, State.UP_FOR_RESCHEDULE, 2, 1)
+
+        done, fail = True, False
+        run_ti_and_assert(date4, date3, date4, 60, State.SUCCESS, 3, 0)
 
     def test_depends_on_past(self):
         dagbag = models.DagBag()

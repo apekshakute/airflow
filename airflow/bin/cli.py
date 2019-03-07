@@ -218,6 +218,7 @@ def backfill(args, dag=None):
             verbose=args.verbose,
             conf=run_conf,
             rerun_failed_tasks=args.rerun_failed_tasks,
+            run_backwards=args.run_backwards
         )
 
 
@@ -1026,12 +1027,16 @@ def worker(args):
     from airflow.executors.celery_executor import app as celery_app
     from celery.bin import worker
 
+    autoscale = args.autoscale
+    if autoscale is None and conf.has_option("celery", "worker_autoscale"):
+        autoscale = conf.get("celery", "worker_autoscale")
     worker = worker.worker(app=celery_app)
     options = {
         'optimization': 'fair',
         'O': 'fair',
         'queues': args.queues,
         'concurrency': args.concurrency,
+        'autoscale': autoscale,
         'hostname': args.celery_hostname,
         'loglevel': conf.get('core', 'LOGGING_LEVEL'),
     }
@@ -1572,6 +1577,13 @@ class CLIFactory(object):
                 "all the failed tasks for the backfill date range "
                 "instead of throwing exceptions"),
             "store_true"),
+        'run_backwards': Arg(
+            ("-B", "--run_backwards",),
+            (
+                "if set, the backfill will run tasks from the most "
+                "recent day first.  if there are tasks that depend_on_past "
+                "this option will throw an exception"),
+            "store_true"),
 
         # list_tasks
         'tree': Arg(("-t", "--tree"), "Tree view", "store_true"),
@@ -1897,6 +1909,9 @@ class CLIFactory(object):
             help='Do not prompt for password.  Use random string instead',
             default=False,
             action='store_true'),
+        'autoscale': Arg(
+            ('-a', '--autoscale'),
+            help="Minimum and Maximum number of worker to autoscale"),
     }
     subparsers = (
         {
@@ -1914,7 +1929,7 @@ class CLIFactory(object):
                 'mark_success', 'local', 'donot_pickle',
                 'bf_ignore_dependencies', 'bf_ignore_first_depends_on_past',
                 'subdir', 'pool', 'delay_on_limit', 'dry_run', 'verbose', 'conf',
-                'reset_dag_run', 'rerun_failed_tasks',
+                'reset_dag_run', 'rerun_failed_tasks', 'run_backwards'
             )
         }, {
             'func': list_dag_runs,
@@ -2038,7 +2053,7 @@ class CLIFactory(object):
             'func': worker,
             'help': "Start a Celery worker node",
             'args': ('do_pickle', 'queues', 'concurrency', 'celery_hostname',
-                     'pid', 'daemon', 'stdout', 'stderr', 'log_file'),
+                     'pid', 'daemon', 'stdout', 'stderr', 'log_file', 'autoscale'),
         }, {
             'func': flower,
             'help': "Start a Celery Flower",

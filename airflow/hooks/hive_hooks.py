@@ -71,13 +71,13 @@ class HiveCliHook(BaseHook):
     connection string as is.
 
     :param mapred_queue: queue used by the Hadoop Scheduler (Capacity or Fair)
-    :type  mapred_queue: string
+    :type  mapred_queue: str
     :param mapred_queue_priority: priority within the job queue.
         Possible settings include: VERY_HIGH, HIGH, NORMAL, LOW, VERY_LOW
-    :type  mapred_queue_priority: string
+    :type  mapred_queue_priority: str
     :param mapred_job_name: This name will appear in the jobtracker.
         This can make monitoring easier.
-    :type  mapred_job_name: string
+    :type  mapred_job_name: str
     """
 
     def __init__(
@@ -323,7 +323,7 @@ class HiveCliHook(BaseHook):
         :type field_dict: OrderedDict
         :param delimiter: field delimiter in the file
         :type delimiter: str
-        :param encoding: string encoding to use when writing DataFrame to file
+        :param encoding: str encoding to use when writing DataFrame to file
         :type encoding: str
         :param pandas_kwargs: passed to DataFrame.to_csv
         :type pandas_kwargs: dict
@@ -536,13 +536,13 @@ class HiveMetastoreHook(BaseHook):
         Checks whether a partition exists
 
         :param schema: Name of hive schema (database) @table belongs to
-        :type schema: string
+        :type schema: str
         :param table: Name of hive table @partition belongs to
-        :type schema: string
+        :type schema: str
         :partition: Expression that matches the partitions to check for
             (eg `a = 'b' AND c = 'd'`)
-        :type schema: string
-        :rtype: boolean
+        :type schema: str
+        :rtype: bool
 
         >>> hh = HiveMetastoreHook()
         >>> t = 'static_babynames_partitioned'
@@ -563,12 +563,12 @@ class HiveMetastoreHook(BaseHook):
         Checks whether a partition with a given name exists
 
         :param schema: Name of hive schema (database) @table belongs to
-        :type schema: string
+        :type schema: str
         :param table: Name of hive table @partition belongs to
-        :type schema: string
+        :type schema: str
         :partition: Name of the partitions to check for (eg `a=b/c=d`)
-        :type schema: string
-        :rtype: boolean
+        :type schema: str
+        :rtype: bool
 
         >>> hh = HiveMetastoreHook()
         >>> t = 'static_babynames_partitioned'
@@ -652,7 +652,7 @@ class HiveMetastoreHook(BaseHook):
         :param part_specs: list of partition specs.
         :type part_specs: list
         :param partition_key: partition key name.
-        :type partition_key: string
+        :type partition_key: str
         :param filter_map: partition_key:partition_value map used for partition filtering,
                            e.g. {'key1': 'value1', 'key2': 'value2'}.
                            Only partitions matching all partition_key:partition_value
@@ -692,11 +692,11 @@ class HiveMetastoreHook(BaseHook):
         filter out partitions.
 
         :param schema: schema name.
-        :type schema: string
+        :type schema: str
         :param table_name: table name.
-        :type table_name: string
+        :type table_name: str
         :param field: partition key to get max partition from.
-        :type field: string
+        :type field: str
         :param filter_map: partition_key:partition_value map used for partition filtering.
         :type filter_map: map
 
@@ -761,6 +761,9 @@ class HiveServer2Hook(BaseHook):
         self.hiveserver2_conn_id = hiveserver2_conn_id
 
     def get_conn(self, schema=None):
+        """
+        Returns a Hive connection object.
+        """
         db = self.get_connection(self.hiveserver2_conn_id)
         auth_mechanism = db.extra_dejson.get('authMechanism', 'NONE')
         if auth_mechanism == 'NONE' and db.login is None:
@@ -834,11 +837,17 @@ class HiveServer2Hook(BaseHook):
     def get_results(self, hql, schema='default', fetch_size=None, hive_conf=None):
         """
         Get results of the provided hql in target schema.
+
         :param hql: hql to be executed.
+        :type hql: str or list
         :param schema: target schema, default to 'default'.
-        :param fetch_size max size of result to fetch.
+        :type schema: str
+        :param fetch_size max: size of result to fetch.
+        :type fetch_size_max: int
         :param hive_conf: hive_conf to execute alone with the hql.
-        :return: results of hql execution.
+        :type hive_conf: dict
+        :return: results of hql execution, dict with data (list of results) and header
+        :rtype: dict
         """
         results_iter = self._get_results(hql, schema,
                                          fetch_size=fetch_size, hive_conf=hive_conf)
@@ -861,15 +870,24 @@ class HiveServer2Hook(BaseHook):
             hive_conf=None):
         """
         Execute hql in target schema and write results to a csv file.
+
         :param hql: hql to be executed.
+        :type hql: str or list
         :param csv_filepath: filepath of csv to write results into.
-        :param schema: target schema, , default to 'default'.
-        :param delimiter: delimiter of the csv file.
+        :type csv_filepath: str
+        :param schema: target schema, default to 'default'.
+        :type schema: str
+        :param delimiter: delimiter of the csv file, default to ','.
+        :type delimiter: str
         :param lineterminator: lineterminator of the csv file.
-        :param output_header: header of the csv file.
-        :param fetch_size: number of result rows to write into the csv file.
+        :type lineterminator: str
+        :param output_header: header of the csv file, default to True.
+        :type output_header: bool
+        :param fetch_size: number of result rows to write into the csv file, default to 1000.
+        :type fetch_size: int
         :param hive_conf: hive_conf to execute alone with the hql.
-        :return:
+        :type hive_conf: dict
+
         """
 
         results_iter = self._get_results(hql, schema,
@@ -905,6 +923,15 @@ class HiveServer2Hook(BaseHook):
         """
         Get a set of records from a Hive query.
 
+        :param hql: hql to be executed.
+        :type hql: str or list
+        :param schema: target schema, default to 'default'.
+        :type schema: str
+        :param hive_conf: hive_conf to execute alone with the hql.
+        :type hive_conf: dict
+        :return: result of hive execution
+        :rtype: list
+
         >>> hh = HiveServer2Hook()
         >>> sql = "SELECT * FROM airflow.static_babynames LIMIT 100"
         >>> len(hh.get_records(sql))
@@ -915,6 +942,13 @@ class HiveServer2Hook(BaseHook):
     def get_pandas_df(self, hql, schema='default'):
         """
         Get a pandas dataframe from a Hive query
+
+        :param hql: hql to be executed.
+        :type hql: str or list
+        :param schema: target schema, default to 'default'.
+        :type schema: str
+        :return: result of hql execution
+        :rtype: DataFrame
 
         >>> hh = HiveServer2Hook()
         >>> sql = "SELECT * FROM airflow.static_babynames LIMIT 100"

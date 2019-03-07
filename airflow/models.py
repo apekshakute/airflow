@@ -39,7 +39,6 @@ import zipfile
 import jinja2
 import json
 import logging
-import numbers
 import os
 import pendulum
 import pickle
@@ -279,7 +278,7 @@ class DagBag(BaseDagBag, LoggingMixin):
         self.import_errors = {}
         self.has_logged = False
 
-        self.collect_dags(dag_folder, include_examples)
+        self.collect_dags(dag_folder=dag_folder, include_examples=include_examples)
 
     def size(self):
         """
@@ -534,7 +533,7 @@ class DagBag(BaseDagBag, LoggingMixin):
         stats = []
         FileLoadStat = namedtuple(
             'FileLoadStat', "file duration dag_num task_num dags")
-        for filepath in list_py_file_paths(dag_folder, include_examples):
+        for filepath in list_py_file_paths(dag_folder, include_examples=include_examples):
             try:
                 ts = timezone.utcnow()
                 found_dags = self.process_file(
@@ -1081,15 +1080,15 @@ class TaskInstance(Base, LoggingMixin):
         :type mark_success: bool
         :param ignore_all_deps: Ignore all ignorable dependencies.
             Overrides the other ignore_* parameters.
-        :type ignore_all_deps: boolean
+        :type ignore_all_deps: bool
         :param ignore_depends_on_past: Ignore depends_on_past parameter of DAGs
             (e.g. for Backfills)
-        :type ignore_depends_on_past: boolean
+        :type ignore_depends_on_past: bool
         :param ignore_task_deps: Ignore task-specific dependencies such as depends_on_past
             and trigger rule
-        :type ignore_task_deps: boolean
+        :type ignore_task_deps: bool
         :param ignore_ti_state: Ignore the task instance's previous failure/success
-        :type ignore_ti_state: boolean
+        :type ignore_ti_state: bool
         :param local: Whether to run the task locally
         :type local: bool
         :param pickle_id: If the DAG was serialized to the DB, the ID
@@ -1340,7 +1339,7 @@ class TaskInstance(Base, LoggingMixin):
         :type session: Session
         :param verbose: whether log details on failed dependencies on
             info or debug log level
-        :type verbose: boolean
+        :type verbose: bool
         """
         dep_context = dep_context or DepContext()
         failed = False
@@ -1480,19 +1479,19 @@ class TaskInstance(Base, LoggingMixin):
         executed, in preparation for _run_raw_task
 
         :param verbose: whether to turn on more verbose logging
-        :type verbose: boolean
+        :type verbose: bool
         :param ignore_all_deps: Ignore all of the non-critical dependencies, just runs
-        :type ignore_all_deps: boolean
+        :type ignore_all_deps: bool
         :param ignore_depends_on_past: Ignore depends_on_past DAG attribute
-        :type ignore_depends_on_past: boolean
+        :type ignore_depends_on_past: bool
         :param ignore_task_deps: Don't check the dependencies of this TI's task
-        :type ignore_task_deps: boolean
+        :type ignore_task_deps: bool
         :param ignore_ti_state: Disregards previous task instance state
-        :type ignore_ti_state: boolean
+        :type ignore_ti_state: bool
         :param mark_success: Don't run the task, mark its state as success
-        :type mark_success: boolean
+        :type mark_success: bool
         :param test_mode: Doesn't record success or failure in the DB
-        :type test_mode: boolean
+        :type test_mode: bool
         :param pool: specifies the pool to use to run the task instance
         :type pool: str
         :return: whether the state was changed to running or not
@@ -1531,7 +1530,13 @@ class TaskInstance(Base, LoggingMixin):
         msg = "Starting attempt {attempt} of {total}".format(
             attempt=self.try_number,
             total=self.max_tries + 1)
+
+        # Set the task start date. In case it was re-scheduled use the initial
+        # start date that is recorded in task_reschedule table
         self.start_date = timezone.utcnow()
+        task_reschedules = TaskReschedule.find_for_task_instance(self, session)
+        if task_reschedules:
+            self.start_date = task_reschedules[0].start_date
 
         dep_context = DepContext(
             deps=RUN_DEPS - QUEUE_DEPS,
@@ -1610,9 +1615,9 @@ class TaskInstance(Base, LoggingMixin):
         only after another function changes the state to running.
 
         :param mark_success: Don't run the task, mark its state as success
-        :type mark_success: boolean
+        :type mark_success: bool
         :param test_mode: Doesn't record success or failure in the DB
-        :type test_mode: boolean
+        :type test_mode: bool
         :param pool: specifies the pool to use to run the task instance
         :type pool: str
         """
@@ -1625,6 +1630,7 @@ class TaskInstance(Base, LoggingMixin):
         self.operator = task.__class__.__name__
 
         context = {}
+        actual_start_date = timezone.utcnow()
         try:
             if not mark_success:
                 context = self.get_template_context()
@@ -1688,7 +1694,7 @@ class TaskInstance(Base, LoggingMixin):
             self.state = State.SKIPPED
         except AirflowRescheduleException as reschedule_exception:
             self.refresh_from_db()
-            self._handle_reschedule(reschedule_exception, test_mode, context)
+            self._handle_reschedule(actual_start_date, reschedule_exception, test_mode, context)
             return
         except AirflowException as e:
             self.refresh_from_db()
@@ -1760,7 +1766,7 @@ class TaskInstance(Base, LoggingMixin):
         task_copy.dry_run()
 
     @provide_session
-    def _handle_reschedule(self, reschedule_exception, test_mode=False, context=None,
+    def _handle_reschedule(self, actual_start_date, reschedule_exception, test_mode=False, context=None,
                            session=None):
         # Don't record reschedule request in test mode
         if test_mode:
@@ -1771,7 +1777,7 @@ class TaskInstance(Base, LoggingMixin):
 
         # Log reschedule request
         session.add(TaskReschedule(self.task, self.execution_date, self._try_number,
-                    self.start_date, self.end_date,
+                    actual_start_date, self.end_date,
                     reschedule_exception.reschedule_date))
 
         # set state
@@ -2032,7 +2038,7 @@ class TaskInstance(Base, LoggingMixin):
         Make an XCom available for tasks to pull.
 
         :param key: A key for the XCom
-        :type key: string
+        :type key: str
         :param value: A value for the XCom. The value is pickled and stored
             in the database.
         :type value: any pickleable object
@@ -2078,13 +2084,13 @@ class TaskInstance(Base, LoggingMixin):
             available as a constant XCOM_RETURN_KEY. This key is automatically
             given to XComs returned by tasks (as opposed to being pushed
             manually). To remove the filter, pass key=None.
-        :type key: string
+        :type key: str
         :param task_ids: Only XComs from tasks with matching ids will be
             pulled. Can pass None to remove the filter.
-        :type task_ids: string or iterable of strings (representing task_ids)
+        :type task_ids: str or iterable of strings (representing task_ids)
         :param dag_id: If provided, only pulls XComs from this DAG.
             If None (default), the DAG of the calling task is used.
-        :type dag_id: string
+        :type dag_id: str
         :param include_prior_dates: If False, only XComs from the current
             execution_date are returned. If True, XComs from previous dates
             are returned as well.
@@ -2323,9 +2329,9 @@ class BaseOperator(LoggingMixin):
     be set by using the set_upstream and/or set_downstream methods.
 
     :param task_id: a unique, meaningful id for the task
-    :type task_id: string
+    :type task_id: str
     :param owner: the owner of the task, using the unix username is recommended
-    :type owner: string
+    :type owner: str
     :param retries: the number of retries that should be performed before
         failing the task
     :type retries: int
@@ -2872,25 +2878,19 @@ class BaseOperator(LoggingMixin):
         Renders a template from a field. If the field is a string, it will
         simply render the string and return the result. If it is a collection or
         nested set of collections, it will traverse the structure and render
-        all strings in it.
+        all elements in it. If the field has another type, it will return it as it is.
         """
         rt = self.render_template
         if isinstance(content, six.string_types):
             result = jinja_env.from_string(content).render(**context)
         elif isinstance(content, (list, tuple)):
             result = [rt(attr, e, context) for e in content]
-        elif isinstance(content, numbers.Number):
-            result = content
         elif isinstance(content, dict):
             result = {
                 k: rt("{}[{}]".format(attr, k), v, context)
                 for k, v in list(content.items())}
         else:
-            param_type = type(content)
-            msg = (
-                "Type '{param_type}' used for parameter '{attr}' is "
-                "not supported for templating").format(**locals())
-            raise AirflowException(msg)
+            result = content
         return result
 
     def render_template(self, attr, content, context):
@@ -3245,9 +3245,9 @@ class DAG(BaseDag, LoggingMixin):
     added once to a DAG.
 
     :param dag_id: The id of the DAG
-    :type dag_id: string
+    :type dag_id: str
     :param description: The description for the DAG to e.g. be shown on the webserver
-    :type description: string
+    :type description: str
     :param schedule_interval: Defines how often that DAG runs, this
         timedelta object gets added to your latest task instance's
         execution_date to figure out the next schedule
@@ -3264,7 +3264,7 @@ class DAG(BaseDag, LoggingMixin):
         defines where jinja will look for your templates. Order matters.
         Note that jinja/airflow includes the path of your DAG file by
         default
-    :type template_searchpath: string or list of stings
+    :type template_searchpath: str or list of stings
     :param user_defined_macros: a dictionary of macros that will be exposed
         in your jinja templates. For example, passing ``dict(foo='bar')``
         to this argument allows you to ``{{ foo }}`` in all jinja
@@ -3303,9 +3303,9 @@ class DAG(BaseDag, LoggingMixin):
     :type sla_miss_callback: types.FunctionType
     :param default_view: Specify DAG default view (tree, graph, duration,
                                                    gantt, landing_times)
-    :type default_view: string
+    :type default_view: str
     :param orientation: Specify DAG orientation in graph view (LR, TB, RL, BT)
-    :type orientation: string
+    :type orientation: str
     :param catchup: Perform scheduler catchup (or only run latest)? Defaults to True
     :type catchup: bool
     :param on_failure_callback: A function to be called when a DagRun of this dag fails.
@@ -4274,6 +4274,7 @@ class DAG(BaseDag, LoggingMixin):
             verbose=False,
             conf=None,
             rerun_failed_tasks=False,
+            run_backwards=False,
     ):
         """
         Runs the DAG.
@@ -4296,14 +4297,19 @@ class DAG(BaseDag, LoggingMixin):
             dependencies for the first set of tasks only
         :type ignore_first_depends_on_past: bool
         :param pool: Resource pool to use
-        :type pool: string
+        :type pool: str
         :param delay_on_limit_secs: Time in seconds to wait before next attempt to run
             dag run when max_active_runs limit has been reached
         :type delay_on_limit_secs: float
         :param verbose: Make logging output more verbose
-        :type verbose: boolean
+        :type verbose: bool
         :param conf: user defined dictionary passed from CLI
         :type conf: dict
+        :param rerun_failed_tasks:
+        :type: bool
+        :param run_backwards:
+        :type: bool
+
         """
         from airflow.jobs import BackfillJob
         if not executor and local:
@@ -4324,6 +4330,7 @@ class DAG(BaseDag, LoggingMixin):
             verbose=verbose,
             conf=conf,
             rerun_failed_tasks=rerun_failed_tasks,
+            run_backwards=run_backwards,
         )
         job.run()
 
@@ -4350,7 +4357,7 @@ class DAG(BaseDag, LoggingMixin):
         Returns the dag run.
 
         :param run_id: defines the the run id for this dag run
-        :type run_id: string
+        :type run_id: str
         :param execution_date: the execution date of this dag run
         :type execution_date: datetime
         :param state: the state of the dag run
@@ -5082,9 +5089,9 @@ class DagRun(Base, LoggingMixin):
         Returns a set of dag runs for the given search criteria.
 
         :param dag_id: the dag_id to find dag runs for
-        :type dag_id: integer, list
+        :type dag_id: int, list
         :param run_id: defines the the run id for this dag run
-        :type run_id: string
+        :type run_id: str
         :param execution_date: the execution date
         :type execution_date: datetime
         :param state: the state of the dag run

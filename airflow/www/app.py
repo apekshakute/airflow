@@ -139,8 +139,8 @@ def create_app(config=None, testing=False):
                 log.debug('Adding view %s', v.name)
                 admin.add_view(v)
             for bp in flask_blueprints:
-                log.debug('Adding blueprint %s', bp.name)
-                app.register_blueprint(bp)
+                log.debug("Adding blueprint %s:%s", bp["name"], bp["blueprint"].import_name)
+                app.register_blueprint(bp["blueprint"])
             for ml in sorted(menu_links, key=lambda x: x.name):
                 log.debug('Adding menu link %s', ml.name)
                 admin.add_link(ml)
@@ -173,7 +173,7 @@ app = None
 
 
 def root_app(env, resp):
-    resp(b'404 Not Found', [(b'Content-Type', b'text/plain')])
+    resp(b'404 Not Found', [('Content-Type', 'text/plain')])
     return [b'Apache Airflow is not at this location']
 
 
