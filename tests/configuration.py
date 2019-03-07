@@ -20,7 +20,9 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import contextlib
 import os
+import warnings
 from collections import OrderedDict
 
 import six
@@ -33,6 +35,23 @@ if six.PY2:
     import unittest2 as unittest
 else:
     import unittest
+
+
+@contextlib.contextmanager
+def env_vars(**vars):
+    original = {}
+    for key, value in vars.items():
+        original[key] = os.environ.get(key)
+        if value is not None:
+            os.environ[key] = value
+        else:
+            os.environ.pop(key, None)
+    yield
+    for key, value in original.items():
+        if value is not None:
+            os.environ[key] = value
+        else:
+            os.environ.pop(key, None)
 
 
 class ConfTest(unittest.TestCase):
@@ -48,6 +67,30 @@ class ConfTest(unittest.TestCase):
     def tearDownClass(cls):
         del os.environ['AIRFLOW__TESTSECTION__TESTKEY']
         del os.environ['AIRFLOW__TESTSECTION__TESTPERCENT']
+
+    def test_airflow_home_default(self):
+        with env_vars(AIRFLOW_HOME=None):
+            self.assertEqual(
+                configuration.get_airflow_home(),
+                configuration.expand_env_var('~/airflow'))
+
+    def test_airflow_home_override(self):
+        with env_vars(AIRFLOW_HOME='/path/to/airflow'):
+            self.assertEqual(
+                configuration.get_airflow_home(),
+                '/path/to/airflow')
+
+    def test_airflow_config_default(self):
+        with env_vars(AIRFLOW_CONFIG=None):
+            self.assertEqual(
+                configuration.get_airflow_config('/home/airflow'),
+                configuration.expand_env_var('/home/airflow/airflow.cfg'))
+
+    def test_airflow_config_override(self):
+        with env_vars(AIRFLOW_CONFIG='/path/to/airflow/airflow.cfg'):
+            self.assertEqual(
+                configuration.get_airflow_config('/home//airflow'),
+                '/path/to/airflow/airflow.cfg')
 
     def test_env_var_config(self):
         opt = conf.get('testsection', 'testkey')
@@ -236,3 +279,43 @@ key3 = value3
             self.assertEquals(conf.getint('celery', 'result_backend'), 99)
             if tmp:
                 os.environ['AIRFLOW__CELERY__RESULT_BACKEND'] = tmp
+
+    def test_deprecated_values(self):
+        def make_config():
+            test_conf = AirflowConfigParser()
+            # Guarantee we have a deprecated setting, so we test the deprecation
+            # lookup even if we remove this explicit fallback
+            test_conf.deprecated_values = {
+                'core': {
+                    'task_runner': ('BashTaskRunner', 'StandardTaskRunner', '2.0'),
+                },
+            }
+            test_conf.read_dict({
+                'core': {
+                    'executor': 'SequentialExecutor',
+                    'task_runner': 'BashTaskRunner',
+                    'sql_alchemy_conn': 'sqlite://',
+                },
+                'webserver': {
+                    'authenticate': False,
+                },
+            })
+            return test_conf
+
+        with self.assertWarns(FutureWarning):
+            test_conf = make_config()
+            self.assertEqual(test_conf.get('core', 'task_runner'), 'StandardTaskRunner')
+
+        with self.assertWarns(FutureWarning):
+            with env_vars(AIRFLOW__CORE__TASK_RUNNER='BashTaskRunner'):
+                test_conf = make_config()
+
+                self.assertEqual(test_conf.get('core', 'task_runner'), 'StandardTaskRunner')
+
+        with warnings.catch_warnings(record=True) as w:
+            with env_vars(AIRFLOW__CORE__TASK_RUNNER='NotBashTaskRunner'):
+                test_conf = make_config()
+
+                self.assertEqual(test_conf.get('core', 'task_runner'), 'NotBashTaskRunner')
+
+                self.assertListEqual([], w)

@@ -58,7 +58,7 @@ class DataFlowJavaOperator(BaseOperator):
         Cloud Platform for the dataflow job status while the job is in the
         JOB_STATE_RUNNING state.
     :type poll_sleep: int
-    :param job_class: The name of the dataflow job class to be executued, it
+    :param job_class: The name of the dataflow job class to be executed, it
         is often not the main class configured in the dataflow jar file.
     :type job_class: str
 
@@ -271,7 +271,7 @@ class DataFlowPythonOperator(BaseOperator):
         For more detail on job submission have a look at the reference:
         https://cloud.google.com/dataflow/pipelines/specifying-exec-params
 
-    :param py_file: Reference to the python dataflow pipleline file.py, e.g.,
+    :param py_file: Reference to the python dataflow pipeline file.py, e.g.,
         /some/local/file/path/to/your/python/pipeline/file.
     :type py_file: str
     :param job_name: The 'job_name' to use when executing the DataFlow job
