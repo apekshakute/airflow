@@ -1386,11 +1386,32 @@ class LocalTaskJobTest(unittest.TestCase):
 class SchedulerJobTest(unittest.TestCase):
 
     def setUp(self):
-        self.dagbag = DagBag()
         with create_session() as session:
             session.query(models.DagRun).delete()
+            session.query(models.TaskInstance).delete()
+            session.query(models.Pool).delete()
+            session.query(models.DagModel).delete()
+            session.query(models.SlaMiss).delete()
             session.query(models.ImportError).delete()
             session.commit()
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dagbag = DagBag()
+
+        def getboolean(section, key):
+            if section.lower() == 'core' and key.lower() == 'load_examples':
+                return False
+            else:
+                return configuration.conf.getboolean(section, key)
+
+        cls.patcher = mock.patch('airflow.jobs.conf.getboolean')
+        mock_getboolean = cls.patcher.start()
+        mock_getboolean.side_effect = getboolean
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.patcher.stop()
 
     @staticmethod
     def run_single_scheduler_loop_with_no_dags(dags_folder):
@@ -2160,6 +2181,54 @@ class SchedulerJobTest(unittest.TestCase):
         ti2.refresh_from_db(session=session)
         self.assertEqual(ti2.state, State.SCHEDULED)
 
+    def test_change_state_for_tasks_failed_to_execute(self):
+        dag = DAG(
+            dag_id='dag_id',
+            start_date=DEFAULT_DATE)
+
+        task = DummyOperator(
+            task_id='task_id',
+            dag=dag,
+            owner='airflow')
+
+        # If there's no left over task in executor.queued_tasks, nothing happens
+        session = settings.Session()
+        scheduler_job = SchedulerJob()
+        mock_logger = mock.MagicMock()
+        test_executor = TestExecutor()
+        scheduler_job.executor = test_executor
+        scheduler_job._logger = mock_logger
+        scheduler_job._change_state_for_tasks_failed_to_execute()
+        mock_logger.info.assert_not_called()
+
+        # Tasks failed to execute with QUEUED state will be set to SCHEDULED state.
+        session.query(TI).delete()
+        session.commit()
+        key = 'dag_id', 'task_id', DEFAULT_DATE, 1
+        test_executor.queued_tasks[key] = 'value'
+        ti = TI(task, DEFAULT_DATE)
+        ti.state = State.QUEUED
+        session.merge(ti)
+        session.commit()
+
+        scheduler_job._change_state_for_tasks_failed_to_execute()
+
+        ti.refresh_from_db()
+        self.assertEquals(State.SCHEDULED, ti.state)
+
+        # Tasks failed to execute with RUNNING state will not be set to SCHEDULED state.
+        session.query(TI).delete()
+        session.commit()
+        ti.state = State.RUNNING
+
+        session.merge(ti)
+        session.commit()
+
+        scheduler_job._change_state_for_tasks_failed_to_execute()
+
+        ti.refresh_from_db()
+        self.assertEquals(State.RUNNING, ti.state)
+
     def test_execute_helper_reset_orphaned_tasks(self):
         session = settings.Session()
         dag = DAG(
@@ -2441,6 +2510,7 @@ class SchedulerJobTest(unittest.TestCase):
         dag = self.dagbag.get_dag(dag_id)
         dag.clear()
         scheduler = SchedulerJob(dag_id,
+                                 subdir=os.path.join(TEST_DAG_FOLDER, 'test_scheduler_dags.py'),
                                  num_runs=2)
         scheduler.run()
 
@@ -2463,7 +2533,8 @@ class SchedulerJobTest(unittest.TestCase):
             dag.clear()
 
         scheduler = SchedulerJob(dag_ids=dag_ids,
-                                 num_runs=2)
+                                 subdir=os.path.join(TEST_DAG_FOLDER, 'test_scheduler_dags.py'),
+                                 num_runs=1)
         scheduler.run()
 
         # zero tasks ran
@@ -3136,7 +3207,8 @@ class SchedulerJobTest(unittest.TestCase):
                 pass
 
         ti_tuple = six.next(six.itervalues(executor.queued_tasks))
-        (command, priority, queue, ti) = ti_tuple
+        (command, priority, queue, simple_ti) = ti_tuple
+        ti = simple_ti.construct_task_instance()
         ti.task = dag_task1
 
         self.assertEqual(ti.try_number, 1)
@@ -3157,15 +3229,21 @@ class SchedulerJobTest(unittest.TestCase):
         # removing self.assertEqual(ti.state, State.SCHEDULED)
         # as scheduler will move state from SCHEDULED to QUEUED
 
-        # now the executor has cleared and it should be allowed the re-queue
+        # now the executor has cleared and it should be allowed the re-queue,
+        # but tasks stay in the executor.queued_tasks after executor.heartbeat()
+        # will be set back to SCHEDULED state
         executor.queued_tasks.clear()
         do_schedule()
         ti.refresh_from_db()
-        self.assertEqual(ti.state, State.QUEUED)
-        # calling below again in order to ensure with try_number 2,
-        # scheduler doesn't put task in queue
+
+        self.assertEqual(ti.state, State.SCHEDULED)
+
+        # To verify that task does get re-queued.
+        executor.queued_tasks.clear()
+        executor.do_update = True
         do_schedule()
-        self.assertEquals(1, len(executor.queued_tasks))
+        ti.refresh_from_db()
+        self.assertIn(ti.state, [State.RUNNING, State.SUCCESS])
 
     @unittest.skipUnless("INTEGRATION" in os.environ, "Can only run end to end")
     def test_retry_handling_job(self):
@@ -3210,8 +3288,8 @@ class SchedulerJobTest(unittest.TestCase):
         logging.info("Test ran in %.2fs, expected %.2fs",
                      run_duration,
                      expected_run_duration)
-        # 5s to wait for child process to exit and 1s dummy sleep
-        # in scheduler loop to prevent excessive logs.
+        # 5s to wait for child process to exit, 1s dummy sleep
+        # in scheduler loop to prevent excessive logs and 1s for last loop to finish.
         self.assertLess(run_duration - expected_run_duration, 6.0)
 
     def test_dag_with_system_exit(self):
