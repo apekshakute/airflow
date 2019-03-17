@@ -233,10 +233,10 @@ all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant + druid + 
     + cassandra + mongo
 
 devel = [
+    'beautifulsoup4~=4.7.1',
     'click==6.7',
     'freezegun',
     'jira',
-    'lxml>=4.0.0',
     'mock',
     'mongomock',
     'moto==1.3.5',
@@ -286,7 +286,6 @@ def do_setup():
         scripts=['airflow/bin/airflow'],
         install_requires=[
             'alembic>=0.9, <1.0',
-            'bleach~=2.1.3',
             'configparser>=3.5.0, <3.6.0',
             'croniter>=0.3.17, <0.4',
             'dill>=0.2.2, <0.3',

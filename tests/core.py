@@ -22,7 +22,6 @@ from __future__ import print_function
 import json
 import unittest
 
-import bleach
 import doctest
 import mock
 import multiprocessing
@@ -41,6 +40,8 @@ from email.mime.text import MIMEText
 from numpy.testing import assert_array_almost_equal
 from six.moves.urllib.parse import urlencode
 from time import sleep
+
+from bs4 import BeautifulSoup
 
 from airflow import configuration
 from airflow.executors import SequentialExecutor
@@ -64,7 +65,6 @@ from airflow.utils import timezone
 from airflow.utils.timezone import datetime
 from airflow.utils.state import State
 from airflow.utils.dates import days_ago, infer_time_unit, round_time, scale_time_units
-from lxml import html
 from airflow.exceptions import AirflowException
 from airflow.configuration import AirflowConfigException, run_command
 from jinja2.sandbox import SecurityError
@@ -1797,10 +1797,8 @@ class SecurityTests(unittest.TestCase):
         self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def get_csrf(self, response):
-        tree = html.fromstring(response.data)
-        form = tree.find('.//form')
-
-        return form.find('.//input[@name="_csrf_token"]').value
+        tree = BeautifulSoup(response.data, 'html.parser')
+        return tree.find('input', attrs={'name': '_csrf_token'})['value']
 
     def test_csrf_rejection(self):
         endpoints = ([
@@ -1824,7 +1822,7 @@ class SecurityTests(unittest.TestCase):
             # exception is expected here since dag doesnt exist
             pass
         response = self.app.get("/admin/log", follow_redirects=True)
-        self.assertIn(bleach.clean("<script>alert(123456)</script>"), response.data.decode('UTF-8'))
+        self.assertNotIn("<script>alert(123456)</script>", response.data.decode('UTF-8'))
 
     def test_chart_data_template(self):
         """Protect chart_data from being able to do RCE."""
@@ -2289,10 +2287,8 @@ class WebPasswordAuthTest(unittest.TestCase):
         session.close()
 
     def get_csrf(self, response):
-        tree = html.fromstring(response.data)
-        form = tree.find('.//form')
-
-        return form.find('.//input[@name="_csrf_token"]').value
+        tree = BeautifulSoup(response.data, 'html.parser')
+        return tree.find('input', attrs={'name': '_csrf_token'})['value']
 
     def login(self, username, password):
         response = self.app.get('/admin/airflow/login')
@@ -2356,10 +2352,8 @@ class WebLdapAuthTest(unittest.TestCase):
         self.app = app.test_client()
 
     def get_csrf(self, response):
-        tree = html.fromstring(response.data)
-        form = tree.find('.//form')
-
-        return form.find('.//input[@name="_csrf_token"]').value
+        tree = BeautifulSoup(response.data, 'html.parser')
+        return tree.find('input', attrs={'name': '_csrf_token'})['value']
 
     def login(self, username, password):
         response = self.app.get('/admin/airflow/login')
