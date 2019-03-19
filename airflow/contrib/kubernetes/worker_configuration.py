@@ -95,9 +95,12 @@ class WorkerConfiguration(LoggingMixin):
 
     def _get_environment(self):
         """Defines any necessary environment variables for the pod executor"""
-        env = {
-            "AIRFLOW__CORE__EXECUTOR": "LocalExecutor",
-        }
+        env = {}
+
+        for env_var_name, env_var_val in six.iteritems(self.kube_config.kube_env_vars):
+            env[env_var_name] = env_var_val
+
+        env["AIRFLOW__CORE__EXECUTOR"] = "LocalExecutor"
 
         if self.kube_config.airflow_configmap:
             env['AIRFLOW__CORE__AIRFLOW_HOME'] = self.worker_airflow_home
@@ -222,7 +225,7 @@ class WorkerConfiguration(LoggingMixin):
             limit_cpu=kube_executor_config.limit_cpu
         )
         gcp_sa_key = kube_executor_config.gcp_service_account_key
-        annotations = dict(kube_executor_config.annotations)
+        annotations = dict(kube_executor_config.annotations) or self.kube_config.kube_annotations
         if gcp_sa_key:
             annotations['iam.cloud.google.com/service-account'] = gcp_sa_key
 
