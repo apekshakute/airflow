@@ -146,10 +146,6 @@ class AirflowConfigParser(ConfigParser):
             'ssl_key': 'celery_ssl_key',
         }
     }
-    deprecation_format_string = (
-        'The {old} option in [{section}] has been renamed to {new} - the old '
-        'setting has been used, but please update your config.'
-    )
 
     # A mapping of old default values that we want to change and warn the user
     # about. Mapping of section -> setting -> { old, replace, by_version }
@@ -158,11 +154,6 @@ class AirflowConfigParser(ConfigParser):
             'task_runner': ('BashTaskRunner', 'StandardTaskRunner', '2.0'),
         },
     }
-    deprecation_value_format_string = (
-        'The {name} setting in [{section}] has the old default value of {old!r}. This '
-        'value has been changed to {new!r} in the running config, but please '
-        'update your config before Apache Airflow {version}.'
-    )
 
     def __init__(self, default_config=None, *args, **kwargs):
         super(AirflowConfigParser, self).__init__(*args, **kwargs)
@@ -210,8 +201,13 @@ class AirflowConfigParser(ConfigParser):
 
                     self.set(section, name, new)
                     warnings.warn(
-                        self.deprecation_value_format_string.format(**locals()),
-                        FutureWarning,
+                        'The {name} setting in [{section}] has the old default value '
+                        'of {old!r}. This value has been changed to {new!r} in the '
+                        'running config, but please update your config before Apache '
+                        'Airflow {version}.'.format(
+                            name=name, section=section, old=old, new=new, version=version
+                        ),
+                        FutureWarning
                     )
 
         self.is_validated = True
@@ -284,12 +280,12 @@ class AirflowConfigParser(ConfigParser):
 
         else:
             log.warning(
-                "section/key [{section}/{key}] not found in config".format(**locals())
+                "section/key [%s/%s] not found in config", section, key
             )
 
             raise AirflowConfigException(
                 "section/key [{section}/{key}] not found "
-                "in config".format(**locals()))
+                "in config".format(section=section, key=key))
 
     def getboolean(self, section, key, **kwargs):
         val = str(self.get(section, key, **kwargs)).lower().strip()
@@ -344,8 +340,9 @@ class AirflowConfigParser(ConfigParser):
         """
         Returns the section as a dict. Values are converted to int, float, bool
         as required.
+
         :param section: section from the config
-        :return: dict
+        :rtype: dict
         """
         if (section not in self._sections and
                 section not in self.airflow_defaults._sections):
@@ -413,7 +410,7 @@ class AirflowConfigParser(ConfigParser):
                 opt = self._get_env_var_option(section, key)
             except ValueError:
                 continue
-            if (not display_sensitive and ev != 'AIRFLOW__CORE__UNIT_TEST_MODE'):
+            if not display_sensitive and ev != 'AIRFLOW__CORE__UNIT_TEST_MODE':
                 opt = '< hidden >'
             elif raw:
                 opt = opt.replace('%', '%%')
@@ -452,7 +449,8 @@ class AirflowConfigParser(ConfigParser):
 
     def _warn_deprecate(self, section, key, deprecated_name):
         warnings.warn(
-            self.deprecation_format_string.format(
+            'The {old} option in [{section}] has been renamed to {new} - the old '
+            'setting has been used, but please update your config.'.format(
                 old=deprecated_name,
                 new=key,
                 section=section,
@@ -558,11 +556,42 @@ conf = AirflowConfigParser(default_config=parameterized_config(DEFAULT_CONFIG))
 
 conf.read(AIRFLOW_CONFIG)
 
+if conf.has_option('core', 'AIRFLOW_HOME'):
+    msg = (
+        'Specifying both AIRFLOW_HOME environment variable and airflow_home '
+        'in the config file is deprecated. Please use only the AIRFLOW_HOME '
+        'environment variable and remove the config file entry.'
+    )
+    if 'AIRFLOW_HOME' in os.environ:
+        warnings.warn(msg, category=DeprecationWarning)
+    elif conf.get('core', 'airflow_home') == AIRFLOW_HOME:
+        warnings.warn(
+            'Specifying airflow_home in the config file is deprecated. As you '
+            'have left it at the default value you should remove the setting '
+            'from your airflow.cfg and suffer no change in behaviour.',
+            category=DeprecationWarning,
+        )
+    else:
+        AIRFLOW_HOME = conf.get('core', 'airflow_home')
+        warnings.warn(msg, category=DeprecationWarning)
+
+# Warn about old config file. We used to read ~/airflow/airflow.cfg even if
+# that AIRFLOW_HOME was set to something else
+_old_config_file = os.path.expanduser("~/airflow/airflow.cfg")
+if _old_config_file != AIRFLOW_CONFIG and os.path.isfile(_old_config_file):
+    warnings.warn(
+        'You have two airflow.cfg files: {old} and {new}. Airflow used to look '
+        'at ~/airflow/airflow.cfg, even when AIRFLOW_HOME was set to a different '
+        'value. Airflow will now only read {new}, and you should remove the '
+        'other file'.format(old=_old_config_file, new=AIRFLOW_CONFIG),
+        category=DeprecationWarning,
+    )
+
+
+WEBSERVER_CONFIG = AIRFLOW_HOME + '/webserver_config.py'
 
 if conf.getboolean('webserver', 'rbac'):
     DEFAULT_WEBSERVER_CONFIG = _read_default_config_file('default_webserver_config.py')
-
-    WEBSERVER_CONFIG = AIRFLOW_HOME + '/webserver_config.py'
 
     if not os.path.isfile(WEBSERVER_CONFIG):
         log.info('Creating new FAB webserver config file in: %s', WEBSERVER_CONFIG)

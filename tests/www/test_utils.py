@@ -109,7 +109,7 @@ class UtilsTest(unittest.TestCase):
 
     def test_params_no_values(self):
         """Should return an empty string if no params are passed"""
-        self.assertEquals('', utils.get_params())
+        self.assertEqual('', utils.get_params())
 
     def test_params_search(self):
         self.assertEqual('search=bash_',
@@ -243,15 +243,15 @@ class UtilsTest(unittest.TestCase):
 
         utils.open_maybe_zipped('/path/to/archive.zip/deep/path/to/file.txt')
 
-        mocked_is_zipfile.assert_called_once()
+        assert mocked_is_zipfile.call_count == 1
         (args, kwargs) = mocked_is_zipfile.call_args_list[0]
         self.assertEqual('/path/to/archive.zip', args[0])
 
-        mocked_ZipFile.assert_called_once()
+        assert mocked_ZipFile.call_count == 1
         (args, kwargs) = mocked_ZipFile.call_args_list[0]
         self.assertEqual('/path/to/archive.zip', args[0])
 
-        instance.open.assert_called_once()
+        assert instance.open.call_count == 1
         (args, kwargs) = instance.open.call_args_list[0]
         self.assertEqual('deep/path/to/file.txt', args[0])
 

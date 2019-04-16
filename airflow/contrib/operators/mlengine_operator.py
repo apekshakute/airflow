@@ -106,7 +106,7 @@ class MLEngineBatchPredictionOperator(BaseOperator):
 
     :param input_paths: A list of GCS paths of input data for batch
         prediction. Accepting wildcard operator ``*``, but only at the end. (templated)
-    :type input_paths: list of string
+    :type input_paths: list[str]
 
     :param output_path: The GCS path where the prediction results are
         written to. (templated)
@@ -267,8 +267,9 @@ class MLEngineBatchPredictionOperator(BaseOperator):
             raise
 
         if finished_prediction_job['state'] != 'SUCCEEDED':
-            self.log.error('MLEngine batch prediction job failed: {}'.format(
-                str(finished_prediction_job)))
+            self.log.error(
+                'MLEngine batch prediction job failed: %s', str(finished_prediction_job)
+            )
             raise RuntimeError(finished_prediction_job['errorMessage'])
 
         return finished_prediction_job['predictionOutput']
@@ -584,8 +585,7 @@ class MLEngineTrainingOperator(BaseOperator):
 
         if self._mode == 'DRY_RUN':
             self.log.info('In dry_run mode.')
-            self.log.info('MLEngine Training job request is: {}'.format(
-                training_request))
+            self.log.info('MLEngine Training job request is: %s', training_request)
             return
 
         hook = MLEngineHook(
@@ -604,6 +604,5 @@ class MLEngineTrainingOperator(BaseOperator):
             raise
 
         if finished_training_job['state'] != 'SUCCEEDED':
-            self.log.error('MLEngine training job failed: {}'.format(
-                str(finished_training_job)))
+            self.log.error('MLEngine training job failed: %s', str(finished_training_job))
             raise RuntimeError(finished_training_job['errorMessage'])

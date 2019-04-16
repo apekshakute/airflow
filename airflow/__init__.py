@@ -25,6 +25,8 @@ in their PYTHONPATH. airflow_login should be based off the
 `airflow.www.login`
 """
 from builtins import object
+from typing import Any
+
 from airflow import version
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -39,10 +41,9 @@ from flask_admin import BaseView
 from importlib import import_module
 from airflow.exceptions import AirflowException
 
-if settings.DAGS_FOLDER not in sys.path:
-    sys.path.append(settings.DAGS_FOLDER)
+settings.initialize()
 
-login = None
+login = None  # type: Any
 
 
 def load_login():

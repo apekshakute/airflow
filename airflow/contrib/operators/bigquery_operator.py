@@ -39,7 +39,7 @@ class BigQueryOperator(BaseOperator):
         a list of str (sql statements), or reference to a template file.
         Template reference are recognized by str ending in '.sql'.
     :param destination_dataset_table: A dotted
-        (<project>.|<project>:)<dataset>.<table> that, if set, will store the results
+        ``(<project>.|<project>:)<dataset>.<table>`` that, if set, will store the results
         of the query. (templated)
     :type destination_dataset_table: str
     :param write_disposition: Specifies the action that occurs if the destination table
@@ -85,9 +85,13 @@ class BigQueryOperator(BaseOperator):
     :param schema_update_options: Allows the schema of the destination
         table to be updated as a side effect of the load job.
     :type schema_update_options: tuple
-    :param query_params: a dictionary containing query parameter types and
-        values, passed to BigQuery.
-    :type query_params: dict
+    :param query_params: a list of dictionary containing query parameter types and
+        values, passed to BigQuery. The structure of dictionary should look like
+        'queryParameters' in Google BigQuery Jobs API:
+        https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs.
+        For example, [{ 'name': 'corpus', 'parameterType': { 'type': 'STRING' },
+        'parameterValue': { 'value': 'romeoandjuliet' } }].
+    :type query_params: list
     :param labels: a dictionary containing labels for the job/query,
         passed to BigQuery
     :type labels: dict
@@ -101,7 +105,7 @@ class BigQueryOperator(BaseOperator):
     :param cluster_fields: Request that the result of this query be stored sorted
         by one or more columns. This is only available in conjunction with
         time_partitioning. The order of columns given determines the sort order.
-    :type cluster_fields: list of str
+    :type cluster_fields: list[str]
     :param location: The geographic location of the job. Required except for
         US and EU. See details at
         https://cloud.google.com/bigquery/docs/locations#specifying_your_location
@@ -378,8 +382,8 @@ class BigQueryCreateExternalTableOperator(BaseOperator):
         table to. (templated)
         If source_format is 'DATASTORE_BACKUP', the list must only contain a single URI.
     :type source_objects: list
-    :param destination_project_dataset_table: The dotted (<project>.)<dataset>.<table>
-        BigQuery table to load data into (templated). If <project> is not included,
+    :param destination_project_dataset_table: The dotted ``(<project>.)<dataset>.<table>``
+        BigQuery table to load data into (templated). If ``<project>`` is not included,
         project will be the project defined in the connection json.
     :type destination_project_dataset_table: str
     :param schema_fields: If set, the schema field list as defined here:
@@ -431,7 +435,7 @@ class BigQueryCreateExternalTableOperator(BaseOperator):
     :type delegate_to: str
     :param src_fmt_configs: configure optional fields specific to the source format
     :type src_fmt_configs: dict
-    :param labels a dictionary containing labels for the table, passed to BigQuery
+    :param labels: a dictionary containing labels for the table, passed to BigQuery
     :type labels: dict
     """
     template_fields = ('bucket', 'source_objects',
@@ -456,7 +460,7 @@ class BigQueryCreateExternalTableOperator(BaseOperator):
                  bigquery_conn_id='bigquery_default',
                  google_cloud_storage_conn_id='google_cloud_default',
                  delegate_to=None,
-                 src_fmt_configs={},
+                 src_fmt_configs=None,
                  labels=None,
                  *args, **kwargs):
 
@@ -483,7 +487,7 @@ class BigQueryCreateExternalTableOperator(BaseOperator):
         self.google_cloud_storage_conn_id = google_cloud_storage_conn_id
         self.delegate_to = delegate_to
 
-        self.src_fmt_configs = src_fmt_configs
+        self.src_fmt_configs = src_fmt_configs if src_fmt_configs is not None else dict()
         self.labels = labels
 
     def execute(self, context):
@@ -524,9 +528,10 @@ class BigQueryCreateExternalTableOperator(BaseOperator):
 
 
 class BigQueryDeleteDatasetOperator(BaseOperator):
-    """"
+    """
     This operator deletes an existing dataset from your Project in Big query.
     https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets/delete
+
     :param project_id: The project id of the dataset.
     :type project_id: str
     :param dataset_id: The dataset to be deleted.
@@ -575,7 +580,7 @@ class BigQueryDeleteDatasetOperator(BaseOperator):
 
 
 class BigQueryCreateEmptyDatasetOperator(BaseOperator):
-    """"
+    """
     This operator is used to create new dataset for your Project in Big query.
     https://cloud.google.com/bigquery/docs/reference/rest/v2/datasets#resource
 

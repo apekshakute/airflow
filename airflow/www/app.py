@@ -17,8 +17,9 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-import six
+from typing import Any
 
+import six
 from flask import Flask
 from flask_admin import Admin, base
 from flask_caching import Cache
@@ -30,6 +31,7 @@ from werkzeug.contrib.fixers import ProxyFix
 import airflow
 from airflow import configuration as conf
 from airflow import models, LoggingMixin
+from airflow.models.connection import Connection
 from airflow.settings import Session
 
 from airflow.www.blueprints import routes
@@ -111,7 +113,7 @@ def create_app(config=None, testing=False):
         av(vs.UserModelView(
             models.User, Session, name="Users", category="Admin"))
         av(vs.ConnectionModelView(
-            models.Connection, Session, name="Connections", category="Admin"))
+            Connection, Session, name="Connections", category="Admin"))
         av(vs.VariableView(
             models.Variable, Session, name="Variables", category="Admin"))
         av(vs.XComView(
@@ -172,7 +174,7 @@ def create_app(config=None, testing=False):
         return app
 
 
-app = None
+app = None  # type: Any
 
 
 def root_app(env, resp):

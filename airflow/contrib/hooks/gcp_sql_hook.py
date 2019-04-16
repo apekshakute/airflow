@@ -38,7 +38,7 @@ from six.moves.urllib.parse import quote_plus
 import requests
 from googleapiclient.discovery import build
 
-from airflow import AirflowException, LoggingMixin, models
+from airflow import AirflowException, LoggingMixin
 from airflow.contrib.hooks.gcp_api_base_hook import GoogleCloudBaseHook
 
 # Number of retries - used by googleapiclient method calls to perform retries
@@ -68,6 +68,9 @@ class CloudSqlOperationStatus:
 class CloudSqlHook(GoogleCloudBaseHook):
     """
     Hook for Google Cloud SQL APIs.
+
+    All the methods in the hook where project_id is used must be called with
+    keyword arguments rather than positional.
     """
     _conn = None
 
@@ -404,13 +407,13 @@ class CloudSqlProxyRunner(LoggingMixin):
         :param instance_specification: Specification of the instance to connect the
             proxy to. It should be specified in the form that is described in
             https://cloud.google.com/sql/docs/mysql/sql-proxy#multiple-instances in
-            -instances parameter (typically in the form of <project>:<region>:<instance>
+            -instances parameter (typically in the form of ``<project>:<region>:<instance>``
             for UNIX socket connections and in the form of
-            <project>:<region>:<instance>=tcp:<port> for TCP connections.
+            ``<project>:<region>:<instance>=tcp:<port>`` for TCP connections.
         :type instance_specification: str
         :param gcp_conn_id: Id of Google Cloud Platform connection to use for
             authentication
-        :type: str
+        :type gcp_conn_id: str
         :param project_id: Optional id of the GCP project to connect to - it overwrites
             default project id taken from the GCP connection.
         :type project_id: str
@@ -481,8 +484,8 @@ class CloudSqlProxyRunner(LoggingMixin):
 
     @provide_session
     def _get_credential_parameters(self, session):
-        connection = session.query(models.Connection). \
-            filter(models.Connection.conn_id == self.gcp_conn_id).first()
+        connection = session.query(Connection). \
+            filter(Connection.conn_id == self.gcp_conn_id).first()
         session.expunge_all()
         if GCP_CREDENTIALS_KEY_PATH in connection.extra_dejson:
             credential_params = [

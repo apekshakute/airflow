@@ -24,21 +24,14 @@ from datetime import datetime
 import six
 
 from airflow import configuration, models
-from airflow.models import TaskInstance, DAG
+from airflow.models import DAG, TaskFail, TaskInstance
 
 from airflow.contrib.operators.bigquery_operator import \
     BigQueryCreateExternalTableOperator, BigQueryCreateEmptyTableOperator, \
     BigQueryDeleteDatasetOperator, BigQueryCreateEmptyDatasetOperator, \
     BigQueryOperator
 from airflow.settings import Session
-
-try:
-    from unittest import mock
-except ImportError:
-    try:
-        import mock
-    except ImportError:
-        mock = None
+from tests.compat import mock
 
 TASK_ID = 'test-bq-create-table-operator'
 TEST_DATASET = 'test-dataset'
@@ -178,7 +171,7 @@ class BigQueryOperatorTest(unittest.TestCase):
         session = Session()
         session.query(models.TaskInstance).filter_by(
             dag_id=TEST_DAG_ID).delete()
-        session.query(models.TaskFail).filter_by(
+        session.query(TaskFail).filter_by(
             dag_id=TEST_DAG_ID).delete()
         session.commit()
         session.close()

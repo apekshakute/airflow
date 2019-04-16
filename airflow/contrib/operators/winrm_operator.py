@@ -39,7 +39,7 @@ class WinRMOperator(BaseOperator):
     WinRMOperator to execute commands on given remote host using the winrm_hook.
 
     :param winrm_hook: predefined ssh_hook to use for remote execution
-    :type winrm_hook: :class:`WinRMHook`
+    :type winrm_hook: airflow.contrib.hooks.winrm_hook.WinRMHook
     :param ssh_conn_id: connection id from airflow Connections
     :type ssh_conn_id: str
     :param remote_host: remote host to connect
@@ -88,7 +88,7 @@ class WinRMOperator(BaseOperator):
         winrm_client = self.winrm_hook.get_conn()
 
         try:
-            self.log.info("Running command: '{command}'...".format(command=self.command))
+            self.log.info("Running command: '%s'...", self.command)
             command_id = self.winrm_hook.winrm_protocol.run_command(
                 winrm_client,
                 self.command

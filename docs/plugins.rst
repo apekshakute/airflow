@@ -100,6 +100,28 @@ looks like:
 
 
 
+You can derive it by inheritance (please refer to the example below).
+Please note ``name`` inside this class must be specified.
+
+After the plugin is imported into Airflow,
+you can invoke it using statement like
+
+
+.. code:: python
+
+    from airflow.{type, like "operators", "sensors"}.{name specificed inside the plugin class} import *
+
+
+When you write your own plugins, make sure you understand them well.
+There are some essential properties for each type of plugin.
+For example,
+
+* For ``Operator`` plugin, an ``execute`` method is compulsory.
+* For ``Sensor`` plugin, a ``poke`` method returning a Boolean value is compulsory.
+
+Make sure you restart the webserver and scheduler after making changes to plugins so that they take effect.
+
+
 Example
 -------
 
@@ -138,6 +160,7 @@ definitions in Airflow.
         pass
 
     # Will show up under airflow.macros.test_plugin.plugin_macro
+    # and in templates through {{ macros.test_plugin.plugin_macro }}
     def plugin_macro():
         pass
 
@@ -203,7 +226,7 @@ the fields appbuilder_views and appbuilder_menu_items were added to the AirflowT
 Plugins as Python packages
 --------------------------
 
-It is possible to load plugins via `setuptools' entrypoint<https://packaging.python.org/guides/creating-and-discovering-plugins/#using-package-metadata>`_ mechanism. To do this link
+It is possible to load plugins via `setuptools entrypoint <https://packaging.python.org/guides/creating-and-discovering-plugins/#using-package-metadata>`_ mechanism. To do this link
 your plugin using an entrypoint in your package. If the package is installed, airflow
 will automatically load the registered plugins from the entrypoint list.
 

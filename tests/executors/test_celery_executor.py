@@ -24,7 +24,6 @@ import mock
 from celery.contrib.testing.worker import start_worker
 
 from airflow.executors import celery_executor
-from airflow.executors.celery_executor import CELERY_FETCH_ERR_MSG_HEADER
 from airflow.executors.celery_executor import (CeleryExecutor, celery_configuration,
                                                send_task_to_executor, execute_command)
 from airflow.executors.celery_executor import app
@@ -104,8 +103,8 @@ class CeleryExecutorTest(unittest.TestCase):
         value_tuple = 'command', '_', 'queue', 'should_be_a_simple_ti'
         executor.queued_tasks['key'] = value_tuple
         executor.heartbeat()
-        self.assertEquals(1, len(executor.queued_tasks))
-        self.assertEquals(executor.queued_tasks['key'], value_tuple)
+        self.assertEqual(1, len(executor.queued_tasks))
+        self.assertEqual(executor.queued_tasks['key'], value_tuple)
 
     def test_exception_propagation(self):
         @app.task
@@ -118,14 +117,13 @@ class CeleryExecutorTest(unittest.TestCase):
 
         executor.tasks = {'key': fake_celery_task()}
         executor.sync()
-        mock_log.error.assert_called_once()
+        assert mock_log.error.call_count == 1
         args, kwargs = mock_log.error.call_args_list[0]
-        log = args[0]
         # Result of queuing is not a celery task but a dict,
         # and it should raise AttributeError and then get propagated
         # to the error log.
-        self.assertIn(CELERY_FETCH_ERR_MSG_HEADER, log)
-        self.assertIn('AttributeError', log)
+        self.assertIn(celery_executor.CELERY_FETCH_ERR_MSG_HEADER, args[0])
+        self.assertIn('AttributeError', args[1])
 
 
 if __name__ == '__main__':

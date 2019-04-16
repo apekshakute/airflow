@@ -36,6 +36,10 @@ class BashOperator(BaseOperator):
     """
     Execute a Bash script, command or set of commands.
 
+    .. seealso::
+        For more information on how to use this operator, take a look at the guide:
+        :ref:`howto/operator:BashOperator`
+
     :param bash_command: The command, set of commands or reference to a
         bash script (must be '.sh') to be executed. (templated)
     :type bash_command: str
@@ -80,7 +84,7 @@ class BashOperator(BaseOperator):
         if self.env is None:
             self.env = os.environ.copy()
         airflow_context_vars = context_to_airflow_vars(context, in_env_var_format=True)
-        self.log.info("Exporting the following env vars:\n" +
+        self.log.info('Exporting the following env vars:\n%s',
                       '\n'.join(["{}={}".format(k, v)
                                  for k, v in
                                  airflow_context_vars.items()]))

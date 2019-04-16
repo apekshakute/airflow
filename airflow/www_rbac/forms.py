@@ -22,7 +22,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from airflow import models
+from airflow.models import Connection
 from airflow.utils import timezone
 
 from flask_appbuilder.forms import DynamicForm
@@ -93,7 +93,7 @@ class ConnectionForm(DynamicForm):
         widget=BS3TextFieldWidget())
     conn_type = SelectField(
         lazy_gettext('Conn Type'),
-        choices=models.Connection._types,
+        choices=Connection._types,
         widget=Select2Widget())
     host = StringField(
         lazy_gettext('Host'),
@@ -136,5 +136,14 @@ class ConnectionForm(DynamicForm):
         lazy_gettext('Keyfile JSON'),
         widget=BS3PasswordFieldWidget())
     extra__google_cloud_platform__scope = StringField(
+        lazy_gettext('Scopes (comma separated)'),
+        widget=BS3TextFieldWidget())
+    extra__grpc__auth_type = StringField(
+        lazy_gettext('Grpc Auth Type'),
+        widget=BS3TextFieldWidget())
+    extra__grpc__credential_pem_file = StringField(
+        lazy_gettext('Credential Keyfile Path'),
+        widget=BS3TextFieldWidget())
+    extra__grpc__scopes = StringField(
         lazy_gettext('Scopes (comma separated)'),
         widget=BS3TextFieldWidget())

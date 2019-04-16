@@ -49,10 +49,10 @@ class S3DeleteObjectsOperator(BaseOperator):
 
         You can provide the following values:
 
-        - False: do not validate SSL certificates. SSL will still be used,
+        - ``False``: do not validate SSL certificates. SSL will still be used,
                  but SSL certificates will not be
                  verified.
-        - path/to/cert/bundle.pem: A filename of the CA cert bundle to uses.
+        - ``path/to/cert/bundle.pem``: A filename of the CA cert bundle to uses.
                  You can specify this argument if you want to use a different
                  CA cert bundle than the one used by botocore.
     :type verify: bool or str
@@ -80,7 +80,7 @@ class S3DeleteObjectsOperator(BaseOperator):
         response = s3_hook.delete_objects(bucket=self.bucket, keys=self.keys)
 
         deleted_keys = [x['Key'] for x in response.get("Deleted", [])]
-        self.log.info("Deleted: {}".format(deleted_keys))
+        self.log.info("Deleted: %s", deleted_keys)
 
         if "Errors" in response:
             errors_keys = [x['Key'] for x in response.get("Errors", [])]

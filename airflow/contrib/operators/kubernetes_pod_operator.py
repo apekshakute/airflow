@@ -21,13 +21,6 @@ from airflow.utils.decorators import apply_defaults
 from airflow.contrib.kubernetes import kube_client, pod_generator, pod_launcher
 from airflow.contrib.kubernetes.pod import Resources
 from airflow.utils.state import State
-from airflow.contrib.kubernetes.volume_mount import VolumeMount  # noqa
-from airflow.contrib.kubernetes.volume import Volume  # noqa
-from airflow.contrib.kubernetes.secret import Secret  # noqa
-
-template_fields = ('templates_dict',)
-template_ext = tuple()
-ui_color = '#ffefeb'
 
 
 class KubernetesPodOperator(BaseOperator):
@@ -37,12 +30,12 @@ class KubernetesPodOperator(BaseOperator):
     :param image: Docker image you wish to launch. Defaults to dockerhub.io,
         but fully qualified URLS will point to custom repositories
     :type image: str
-    :param: namespace: the namespace to run within kubernetes
-    :type: namespace: str
+    :param namespace: the namespace to run within kubernetes
+    :type namespace: str
     :param cmds: entrypoint of the container. (templated)
         The docker images's entrypoint is used if this is not provide.
-    :type cmds: list of str
-    :param arguments: arguments of to the entrypoint. (templated)
+    :type cmds: list[str]
+    :param arguments: arguments of the entrypoint. (templated)
         The docker image's CMD is used if this is not provided.
     :type arguments: list of str
     :param resources: Specify cpu and memory for a pod
@@ -54,9 +47,9 @@ class KubernetesPodOperator(BaseOperator):
                                comma separated list: secret_a,secret_b
     :type image_pull_secrets: str
     :param volume_mounts: volumeMounts for launched pod
-    :type volume_mounts: list of VolumeMount
+    :type volume_mounts: list[airflow.contrib.kubernetes.volume_mount.VolumeMount]
     :param volumes: volumes for launched pod. Includes ConfigMaps and PersistentVolumes
-    :type volumes: list of Volume
+    :type volumes: list[airflow.contrib.kubernetes.volume.Volume]
     :param labels: labels to apply to the Pod
     :type labels: dict
     :param startup_timeout_seconds: timeout in seconds to startup the pod
@@ -68,7 +61,7 @@ class KubernetesPodOperator(BaseOperator):
     :type env_vars: dict
     :param secrets: Kubernetes secrets to inject in the container,
         They can be exposed as environment vars or files in a volume.
-    :type secrets: list of Secret
+    :type secrets: list[airflow.contrib.kubernetes.secret.Secret]
     :param in_cluster: run kubernetes client with in_cluster configuration
     :type in_cluster: bool
     :param cluster_context: context that points to kubernetes cluster.
@@ -86,10 +79,17 @@ class KubernetesPodOperator(BaseOperator):
         /airflow/xcom/return.json in the container will also be pushed to an
         XCom when the container completes.
     :type xcom_push: bool
+    :param is_delete_operator_pod: What to do when the pod reaches its final
+        state, or the execution is interrupted.
+        If False (default): do nothing, If True: delete the pod
+    :type is_delete_operator_pod: bool
     :param hostnetwork: If True enable host networking on the pod
     :type hostnetwork: bool
     :param tolerations: A list of kubernetes tolerations
     :type tolerations: list tolerations
+    :param configmaps: A list of configmap names objects that we
+        want mount as env variables
+    :type configmaps: list[str]
     """
     template_fields = ('cmds', 'arguments', 'env_vars', 'config_file')
 
@@ -125,6 +125,8 @@ class KubernetesPodOperator(BaseOperator):
             pod.node_selectors = self.node_selectors
             pod.hostnetwork = self.hostnetwork
             pod.tolerations = self.tolerations
+            pod.configmaps = self.configmaps
+            pod.security_context = self.security_context
 
             launcher = pod_launcher.PodLauncher(kube_client=client,
                                                 extract_xcom=self.xcom_push)
@@ -174,6 +176,8 @@ class KubernetesPodOperator(BaseOperator):
                  is_delete_operator_pod=False,
                  hostnetwork=False,
                  tolerations=None,
+                 configmaps=None,
+                 security_context=None,
                  *args,
                  **kwargs):
         super(KubernetesPodOperator, self).__init__(*args, **kwargs)
@@ -203,3 +207,5 @@ class KubernetesPodOperator(BaseOperator):
         self.is_delete_operator_pod = is_delete_operator_pod
         self.hostnetwork = hostnetwork
         self.tolerations = tolerations or []
+        self.configmaps = configmaps or []
+        self.security_context = security_context or {}

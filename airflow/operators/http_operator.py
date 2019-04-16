@@ -46,7 +46,9 @@ class SimpleHttpOperator(BaseOperator):
         'requests' documentation (options to modify timeout, ssl, etc.)
     :type extra_options: A dictionary of options, where key is string and value
         depends on the option that's being modified.
-    :param xcom_push: Push the response to Xcom (default: False)
+    :param xcom_push: Push the response to Xcom (default: False).
+        If xcom_push is True, response of an HTTP request will also
+        be pushed to an XCom.
     :type xcom_push: bool
     :param log_response: Log the response (default: False)
     :type log_response: bool
@@ -68,10 +70,6 @@ class SimpleHttpOperator(BaseOperator):
                  http_conn_id='http_default',
                  log_response=False,
                  *args, **kwargs):
-        """
-        If xcom_push is True, response of an HTTP request will also
-        be pushed to an XCom.
-        """
         super(SimpleHttpOperator, self).__init__(*args, **kwargs)
         self.http_conn_id = http_conn_id
         self.method = method
@@ -92,10 +90,10 @@ class SimpleHttpOperator(BaseOperator):
                             self.data,
                             self.headers,
                             self.extra_options)
+        if self.log_response:
+            self.log.info(response.text)
         if self.response_check:
             if not self.response_check(response):
                 raise AirflowException("Response check returned False.")
         if self.xcom_push_flag:
             return response.text
-        if self.log_response:
-            self.log.info(response.text)

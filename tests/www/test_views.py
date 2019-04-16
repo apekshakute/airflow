@@ -387,6 +387,28 @@ class TestLogView(unittest.TestCase):
         self.assertIn('Log by attempts',
                       response.data.decode('utf-8'))
 
+    def test_get_logs_with_metadata_as_download_file(self):
+        url_template = "/admin/airflow/get_logs_with_metadata?dag_id={}&" \
+                       "task_id={}&execution_date={}&" \
+                       "try_number={}&metadata={}&format=file"
+        try_number = 1
+        url = url_template.format(self.DAG_ID,
+                                  self.TASK_ID,
+                                  quote_plus(self.DEFAULT_DATE.isoformat()),
+                                  try_number,
+                                  json.dumps({}))
+        response = self.app.get(url)
+        expected_filename = '{}/{}/{}/{}.log'.format(self.DAG_ID,
+                                                     self.TASK_ID,
+                                                     self.DEFAULT_DATE.isoformat(),
+                                                     try_number)
+
+        content_disposition = response.headers.get('Content-Disposition')
+        self.assertTrue(content_disposition.startswith('attachment'))
+        self.assertTrue(expected_filename in content_disposition)
+        self.assertEqual(200, response.status_code)
+        self.assertIn('Log for testing.', response.data.decode('utf-8'))
+
     def test_get_logs_with_metadata(self):
         url_template = "/admin/airflow/get_logs_with_metadata?dag_id={}&" \
                        "task_id={}&execution_date={}&" \
@@ -497,16 +519,16 @@ class TestVarImportView(unittest.TestCase):
         self.assertIn('int_key', db_dict)
         self.assertIn('list_key', db_dict)
         self.assertIn('dict_key', db_dict)
-        self.assertEquals('str_value', db_dict['str_key'])
-        self.assertEquals('60', db_dict['int_key'])
-        self.assertEquals('[1, 2]', db_dict['list_key'])
+        self.assertEqual('str_value', db_dict['str_key'])
+        self.assertEqual('60', db_dict['int_key'])
+        self.assertEqual('[1, 2]', db_dict['list_key'])
 
         case_a_dict = '{"k_a": 2, "k_b": 3}'
         case_b_dict = '{"k_b": 3, "k_a": 2}'
         try:
-            self.assertEquals(case_a_dict, db_dict['dict_key'])
+            self.assertEqual(case_a_dict, db_dict['dict_key'])
         except AssertionError:
-            self.assertEquals(case_b_dict, db_dict['dict_key'])
+            self.assertEqual(case_b_dict, db_dict['dict_key'])
 
 
 class TestMountPoint(unittest.TestCase):
@@ -806,7 +828,7 @@ class TestDeleteDag(unittest.TestCase):
     def test_delete_dag_button_normal(self):
         resp = self.app.get('/', follow_redirects=True)
         self.assertIn('/delete?dag_id=example_bash_operator', resp.data.decode('utf-8'))
-        self.assertIn("return confirmDeleteDag('example_bash_operator')", resp.data.decode('utf-8'))
+        self.assertIn("return confirmDeleteDag(this, 'example_bash_operator')", resp.data.decode('utf-8'))
 
     def test_delete_dag_button_for_dag_on_scheduler_only(self):
         # Test for JIRA AIRFLOW-3233 (PR 4069):
@@ -822,10 +844,40 @@ class TestDeleteDag(unittest.TestCase):
 
         resp = self.app.get('/', follow_redirects=True)
         self.assertIn('/delete?dag_id={}'.format(test_dag_id), resp.data.decode('utf-8'))
-        self.assertIn("return confirmDeleteDag('{}')".format(test_dag_id), resp.data.decode('utf-8'))
+        self.assertIn("return confirmDeleteDag(this, '{}')".format(test_dag_id), resp.data.decode('utf-8'))
 
         session.query(DM).filter(DM.dag_id == test_dag_id).update({'dag_id': 'example_bash_operator'})
         session.commit()
+
+
+class TestTriggerDag(unittest.TestCase):
+
+    def setUp(self):
+        conf.load_test_config()
+        app = application.create_app(testing=True)
+        app.config['WTF_CSRF_METHODS'] = []
+        self.app = app.test_client()
+        self.session = Session()
+        models.DagBag().get_dag("example_bash_operator").sync_to_db()
+
+    def test_trigger_dag_button_normal_exist(self):
+        resp = self.app.get('/', follow_redirects=True)
+        self.assertIn('/trigger?dag_id=example_bash_operator', resp.data.decode('utf-8'))
+        self.assertIn("return confirmDeleteDag(this, 'example_bash_operator')", resp.data.decode('utf-8'))
+
+    def test_trigger_dag_button(self):
+
+        test_dag_id = "example_bash_operator"
+
+        DR = models.DagRun
+        self.session.query(DR).delete()
+        self.session.commit()
+
+        self.app.post('/admin/airflow/trigger?dag_id={}'.format(test_dag_id))
+
+        run = self.session.query(DR).filter(DR.dag_id == test_dag_id).first()
+        self.assertIsNotNone(run)
+        self.assertIn("manual__", run.run_id)
 
 
 class HelpersTest(unittest.TestCase):
