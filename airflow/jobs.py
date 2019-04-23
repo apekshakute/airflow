@@ -43,7 +43,10 @@ from sqlalchemy.orm.session import make_transient
 
 from airflow import configuration as conf
 from airflow import executors, models, settings
-from airflow.exceptions import AirflowException, NoAvailablePoolSlot, PoolNotFound
+from airflow.exceptions import (
+    AirflowException, NoAvailablePoolSlot, PoolNotFound, DagConcurrencyLimitReached,
+)
+
 from airflow.models import DAG, DagPickle, DagRun, errors, SlaMiss
 from airflow.settings import Stats
 from airflow.task.task_runner import get_task_runner
@@ -561,7 +564,7 @@ class SchedulerJob(BaseJob):
             definitions, or a specific path to a file
         :type subdir: unicode
         :param num_runs: The number of times to try to schedule each DAG file.
-            -1 for unlimited within the run_duration.
+            -1 for unlimited times.
         :type num_runs: int
         :param processor_poll_interval: The number of seconds to wait between
             polls of running processors
@@ -628,6 +631,14 @@ class SchedulerJob(BaseJob):
         """
         if not any([isinstance(ti.sla, timedelta) for ti in dag.tasks]):
             self.log.info("Skipping SLA check for %s because no tasks in DAG have SLAs", dag)
+            return
+
+        # This is a temporary fix for 1.10.4 release.
+        # Background: AIRFLOW-4297
+        # TODO: refactor manage_slas() to handle related issues.
+        if dag._schedule_interval is None:
+            self.log.info("SLA check for DAGs with schedule_interval 'None'/'@once' are "
+                          "skipped in 1.10.4, due to related refactoring going on.")
             return
 
         TI = models.TaskInstance
@@ -2327,8 +2338,19 @@ class BackfillJob(BaseJob):
                                     "Not scheduling since there are no "
                                     "non_pooled_backfill_task_slot_count.")
                             non_pool_slots -= 1
+
+                        num_running_tasks = DAG.get_num_task_instances(
+                            self.dag_id,
+                            states=(State.QUEUED, State.RUNNING))
+
+                        if num_running_tasks >= self.dag.concurrency:
+                            raise DagConcurrencyLimitReached(
+                                "Not scheduling since concurrency limit "
+                                "is reached."
+                            )
+
                         _per_task_process(task, key, ti)
-            except NoAvailablePoolSlot as e:
+            except (NoAvailablePoolSlot, DagConcurrencyLimitReached) as e:
                 self.log.debug(e)
 
             # execute the tasks in the queue

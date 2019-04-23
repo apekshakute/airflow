@@ -141,7 +141,7 @@ azure_cosmos = ['azure-cosmos>=3.0.1']
 azure_container_instances = ['azure-mgmt-containerinstance']
 cassandra = ['cassandra-driver>=3.13.0']
 celery = [
-    'celery>=4.1.1, <4.2.0',
+    'celery~=4.3',
     'flower>=0.7.3, <1.0',
     'tornado>=4.2.0, <6.0',  # Dep of flower. Pin to a version that works on Py3.5.2
 ]
@@ -179,8 +179,8 @@ gcp_api = [
     'google-cloud-container>=0.1.1',
     'google-cloud-language>=1.1.1',
     'google-cloud-spanner>=1.7.1',
-    'google-cloud-bigquery>=0.28.0',
-    'google-cloud-storage==1.10.0',
+    'google-cloud-bigquery>=1.0.0',
+    'google-cloud-storage~=1.14',
     'google-cloud-translate>=1.3.3',
     'google-cloud-vision>=0.35.2',
     'grpcio-gcp>=0.2.2',
