@@ -182,6 +182,7 @@ gcp_api = [
     'google-cloud-bigquery>=1.0.0',
     'google-cloud-storage~=1.14',
     'google-cloud-translate>=1.3.3',
+    'google-cloud-videointelligence>=1.7.0',
     'google-cloud-vision>=0.35.2',
     'grpcio-gcp>=0.2.2',
     'httplib2~=0.9.2',
@@ -226,8 +227,8 @@ salesforce = ['simple-salesforce>=0.72']
 samba = ['pysmbclient>=0.1.3']
 segment = ['analytics-python>=1.2.9']
 sendgrid = ['sendgrid>=5.2.0,<6']
-slack = ['slackclient>=1.0.0']
-mongo = ['pymongo>=3.6.0']
+slack = ['slackclient>=1.0.0,<2.0.0']
+mongo = ['pymongo>=3.6.0', 'dnspython>=1.13.0,<2.0.0']
 snowflake = ['snowflake-connector-python>=1.5.2',
              'snowflake-sqlalchemy>=1.1.0']
 ssh = ['paramiko>=2.1.1', 'pysftp>=0.2.9', 'sshtunnel>=0.1.4,<0.2']
@@ -243,6 +244,7 @@ all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant + druid + 
 devel = [
     'beautifulsoup4~=4.7.1',
     'click==6.7',
+    'contextdecorator;python_version<"3.4"',
     'freezegun',
     'jira',
     'mock;python_version<"3.3"',

@@ -60,6 +60,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
             gcp_conn_id=bigquery_conn_id, delegate_to=delegate_to)
         self.use_legacy_sql = use_legacy_sql
         self.location = location
+        self.num_retries = self._get_field('num_retries', 5)
 
     def get_conn(self):
         """
@@ -72,6 +73,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
             project_id=project,
             use_legacy_sql=self.use_legacy_sql,
             location=self.location,
+            num_retries=self.num_retries
         )
 
     def get_service(self):
@@ -134,7 +136,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
         try:
             service.tables().get(
                 projectId=project_id, datasetId=dataset_id,
-                tableId=table_id).execute()
+                tableId=table_id).execute(num_retries=self.num_retries)
             return True
         except HttpError as e:
             if e.resp['status'] == '404':
@@ -253,7 +255,8 @@ class BigQueryBaseCursor(LoggingMixin):
                  project_id,
                  use_legacy_sql=True,
                  api_resource_configs=None,
-                 location=None):
+                 location=None,
+                 num_retries=None):
 
         self.service = service
         self.project_id = project_id
@@ -264,6 +267,7 @@ class BigQueryBaseCursor(LoggingMixin):
             if api_resource_configs else {}
         self.running_job_id = None
         self.location = location
+        self.num_retries = num_retries
 
     def create_empty_table(self,
                            project_id,
@@ -271,8 +275,10 @@ class BigQueryBaseCursor(LoggingMixin):
                            table_id,
                            schema_fields=None,
                            time_partitioning=None,
+                           cluster_fields=None,
                            labels=None,
-                           view=None):
+                           view=None,
+                           num_retries=None):
         """
         Creates a new, empty table in the dataset.
         To create a view, which is defined by a SQL query, parse a dictionary to 'view' kwarg
@@ -300,6 +306,11 @@ class BigQueryBaseCursor(LoggingMixin):
             .. seealso::
                 https://cloud.google.com/bigquery/docs/reference/rest/v2/tables#timePartitioning
         :type time_partitioning: dict
+        :param cluster_fields: [Optional] The fields used for clustering.
+            Must be specified with time_partitioning, data in the table will be first
+            partitioned and subsequently clustered.
+            https://cloud.google.com/bigquery/docs/reference/rest/v2/tables#clustering.fields
+        :type cluster_fields: list
         :param view: [Optional] A dictionary containing definition for the view.
             If set, it will create a view instead of a table:
             https://cloud.google.com/bigquery/docs/reference/rest/v2/tables#view
@@ -329,11 +340,18 @@ class BigQueryBaseCursor(LoggingMixin):
         if time_partitioning:
             table_resource['timePartitioning'] = time_partitioning
 
+        if cluster_fields:
+            table_resource['clustering'] = {
+                'fields': cluster_fields
+            }
+
         if labels:
             table_resource['labels'] = labels
 
         if view:
             table_resource['view'] = view
+
+        num_retries = num_retries if num_retries else self.num_retries
 
         self.log.info('Creating Table %s:%s.%s',
                       project_id, dataset_id, table_id)
@@ -342,7 +360,7 @@ class BigQueryBaseCursor(LoggingMixin):
             self.service.tables().insert(
                 projectId=project_id,
                 datasetId=dataset_id,
-                body=table_resource).execute()
+                body=table_resource).execute(num_retries=num_retries)
 
             self.log.info('Table created successfully: %s:%s.%s',
                           project_id, dataset_id, table_id)
@@ -538,7 +556,7 @@ class BigQueryBaseCursor(LoggingMixin):
                 projectId=project_id,
                 datasetId=dataset_id,
                 body=table_resource
-            ).execute()
+            ).execute(num_retries=self.num_retries)
 
             self.log.info('External table created successfully: %s',
                           external_project_dataset_table)
@@ -646,7 +664,7 @@ class BigQueryBaseCursor(LoggingMixin):
                 projectId=project_id,
                 datasetId=dataset_id,
                 tableId=table_id,
-                body=table_resource).execute()
+                body=table_resource).execute(num_retries=self.num_retries)
 
             self.log.info('Table patched successfully: %s:%s.%s',
                           project_id, dataset_id, table_id)
@@ -1269,22 +1287,26 @@ class BigQueryBaseCursor(LoggingMixin):
         # Send query and wait for reply.
         query_reply = jobs \
             .insert(projectId=self.project_id, body=job_data) \
-            .execute()
+            .execute(num_retries=self.num_retries)
         self.running_job_id = query_reply['jobReference']['jobId']
+        if 'location' in query_reply['jobReference']:
+            location = query_reply['jobReference']['location']
+        else:
+            location = self.location
 
         # Wait for query to finish.
         keep_polling_job = True
         while keep_polling_job:
             try:
-                if self.location:
+                if location:
                     job = jobs.get(
                         projectId=self.project_id,
                         jobId=self.running_job_id,
-                        location=self.location).execute()
+                        location=location).execute(num_retries=self.num_retries)
                 else:
                     job = jobs.get(
                         projectId=self.project_id,
-                        jobId=self.running_job_id).execute()
+                        jobId=self.running_job_id).execute(num_retries=self.num_retries)
                 if job['status']['state'] == 'DONE':
                     keep_polling_job = False
                     # Check if job had errors.
@@ -1316,10 +1338,10 @@ class BigQueryBaseCursor(LoggingMixin):
             if self.location:
                 job = jobs.get(projectId=self.project_id,
                                jobId=job_id,
-                               location=self.location).execute()
+                               location=self.location).execute(num_retries=self.num_retries)
             else:
                 job = jobs.get(projectId=self.project_id,
-                               jobId=job_id).execute()
+                               jobId=job_id).execute(num_retries=self.num_retries)
             if job['status']['state'] == 'DONE':
                 return True
         except HttpError as err:
@@ -1346,11 +1368,11 @@ class BigQueryBaseCursor(LoggingMixin):
                 jobs.cancel(
                     projectId=self.project_id,
                     jobId=self.running_job_id,
-                    location=self.location).execute()
+                    location=self.location).execute(num_retries=self.num_retries)
             else:
                 jobs.cancel(
                     projectId=self.project_id,
-                    jobId=self.running_job_id).execute()
+                    jobId=self.running_job_id).execute(num_retries=self.num_retries)
         else:
             self.log.info('No running BigQuery jobs to cancel.')
             return
@@ -1387,7 +1409,7 @@ class BigQueryBaseCursor(LoggingMixin):
         """
         tables_resource = self.service.tables() \
             .get(projectId=self.project_id, datasetId=dataset_id, tableId=table_id) \
-            .execute()
+            .execute(num_retries=self.num_retries)
         return tables_resource['schema']
 
     def get_tabledata(self, dataset_id, table_id,
@@ -1420,7 +1442,7 @@ class BigQueryBaseCursor(LoggingMixin):
             projectId=self.project_id,
             datasetId=dataset_id,
             tableId=table_id,
-            **optional_params).execute())
+            **optional_params).execute(num_retries=self.num_retries))
 
     def run_table_delete(self, deletion_dataset_table,
                          ignore_if_missing=False):
@@ -1447,7 +1469,7 @@ class BigQueryBaseCursor(LoggingMixin):
                 .delete(projectId=deletion_project,
                         datasetId=deletion_dataset,
                         tableId=deletion_table) \
-                .execute()
+                .execute(num_retries=self.num_retries)
             self.log.info('Deleted table %s:%s.%s.', deletion_project,
                           deletion_dataset, deletion_table)
         except HttpError:
@@ -1476,7 +1498,7 @@ class BigQueryBaseCursor(LoggingMixin):
         table_id = table_resource['tableReference']['tableId']
         project_id = project_id if project_id is not None else self.project_id
         tables_list_resp = self.service.tables().list(
-            projectId=project_id, datasetId=dataset_id).execute()
+            projectId=project_id, datasetId=dataset_id).execute(num_retries=self.num_retries)
         while True:
             for table in tables_list_resp.get('tables', []):
                 if table['tableReference']['tableId'] == table_id:
@@ -1487,14 +1509,14 @@ class BigQueryBaseCursor(LoggingMixin):
                         projectId=project_id,
                         datasetId=dataset_id,
                         tableId=table_id,
-                        body=table_resource).execute()
+                        body=table_resource).execute(num_retries=self.num_retries)
             # If there is a next page, we need to check the next page.
             if 'nextPageToken' in tables_list_resp:
                 tables_list_resp = self.service.tables()\
                     .list(projectId=project_id,
                           datasetId=dataset_id,
                           pageToken=tables_list_resp['nextPageToken'])\
-                    .execute()
+                    .execute(num_retries=self.num_retries)
             # If there is no next page, then the table doesn't exist.
             else:
                 # do insert
@@ -1503,7 +1525,7 @@ class BigQueryBaseCursor(LoggingMixin):
                 return self.service.tables().insert(
                     projectId=project_id,
                     datasetId=dataset_id,
-                    body=table_resource).execute()
+                    body=table_resource).execute(num_retries=self.num_retries)
 
     def run_grant_dataset_view_access(self,
                                       source_dataset,
@@ -1538,7 +1560,7 @@ class BigQueryBaseCursor(LoggingMixin):
         # we don't want to clobber any existing accesses, so we have to get
         # info on the dataset before we can add view access
         source_dataset_resource = self.service.datasets().get(
-            projectId=source_project, datasetId=source_dataset).execute()
+            projectId=source_project, datasetId=source_dataset).execute(num_retries=self.num_retries)
         access = source_dataset_resource[
             'access'] if 'access' in source_dataset_resource else []
         view_access = {
@@ -1560,7 +1582,7 @@ class BigQueryBaseCursor(LoggingMixin):
                 datasetId=source_dataset,
                 body={
                     'access': access
-                }).execute()
+                }).execute(num_retries=self.num_retries)
         else:
             # if view is already in access, do nothing.
             self.log.info(
@@ -1626,7 +1648,7 @@ class BigQueryBaseCursor(LoggingMixin):
         try:
             self.service.datasets().insert(
                 projectId=dataset_project_id,
-                body=dataset_reference).execute()
+                body=dataset_reference).execute(num_retries=self.num_retries)
             self.log.info('Dataset created successfully: In project %s '
                           'Dataset %s', dataset_project_id, dataset_id)
 
@@ -1651,7 +1673,7 @@ class BigQueryBaseCursor(LoggingMixin):
         try:
             self.service.datasets().delete(
                 projectId=project_id,
-                datasetId=dataset_id).execute()
+                datasetId=dataset_id).execute(num_retries=self.num_retries)
             self.log.info('Dataset deleted successfully: In project %s '
                           'Dataset %s', project_id, dataset_id)
 
@@ -1684,7 +1706,7 @@ class BigQueryBaseCursor(LoggingMixin):
 
         try:
             dataset_resource = self.service.datasets().get(
-                datasetId=dataset_id, projectId=dataset_project_id).execute()
+                datasetId=dataset_id, projectId=dataset_project_id).execute(num_retries=self.num_retries)
             self.log.info("Dataset Resource: %s", dataset_resource)
         except HttpError as err:
             raise AirflowException(
@@ -1731,7 +1753,7 @@ class BigQueryBaseCursor(LoggingMixin):
 
         try:
             datasets_list = self.service.datasets().list(
-                projectId=dataset_project_id).execute()['datasets']
+                projectId=dataset_project_id).execute(num_retries=self.num_retries)['datasets']
             self.log.info("Datasets List: %s", datasets_list)
 
         except HttpError as err:
@@ -1795,7 +1817,7 @@ class BigQueryBaseCursor(LoggingMixin):
             resp = self.service.tabledata().insertAll(
                 projectId=dataset_project_id, datasetId=dataset_id,
                 tableId=table_id, body=body
-            ).execute()
+            ).execute(num_retries=self.num_retries)
 
             if 'insertErrors' not in resp:
                 self.log.info(
@@ -1826,12 +1848,13 @@ class BigQueryCursor(BigQueryBaseCursor):
     https://github.com/dropbox/PyHive/blob/master/pyhive/common.py
     """
 
-    def __init__(self, service, project_id, use_legacy_sql=True, location=None):
+    def __init__(self, service, project_id, use_legacy_sql=True, location=None, num_retries=None):
         super(BigQueryCursor, self).__init__(
             service=service,
             project_id=project_id,
             use_legacy_sql=use_legacy_sql,
             location=location,
+            num_retries=num_retries
         )
         self.buffersize = None
         self.page_token = None
@@ -1899,7 +1922,7 @@ class BigQueryCursor(BigQueryBaseCursor):
             query_results = (self.service.jobs().getQueryResults(
                 projectId=self.project_id,
                 jobId=self.job_id,
-                pageToken=self.page_token).execute())
+                pageToken=self.page_token).execute(num_retries=self.num_retries))
 
             if 'rows' in query_results and query_results['rows']:
                 self.page_token = query_results.get('pageToken')

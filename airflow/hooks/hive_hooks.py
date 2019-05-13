@@ -48,6 +48,7 @@ def get_context_from_env_var():
     """
     Extract context from env variable, e.g. dag_id, task_id and execution_date,
     so that they can be used inside BashOperator and PythonOperator.
+
     :return: The context of interest.
     """
     return {format_map['default']: os.environ.get(format_map['env_var_format'], '')
@@ -754,8 +755,12 @@ class HiveServer2Hook(BaseHook):
     """
     Wrapper around the pyhive library
 
-    Note that the default authMechanism is PLAIN, to override it you
-    can specify it in the ``extra`` of your connection in the UI as in
+    Notes:
+    * the default authMechanism is PLAIN, to override it you
+    can specify it in the ``extra`` of your connection in the UI
+    * the default for run_set_variable_statements is true, if you
+    are using impala you may need to set it to false in the
+    ``extra`` of your connection in the UI
     """
     def __init__(self, hiveserver2_conn_id='hiveserver2_default'):
         self.hiveserver2_conn_id = hiveserver2_conn_id
@@ -801,11 +806,14 @@ class HiveServer2Hook(BaseHook):
                 contextlib.closing(conn.cursor()) as cur:
             cur.arraysize = fetch_size or 1000
 
-            env_context = get_context_from_env_var()
-            if hive_conf:
-                env_context.update(hive_conf)
-            for k, v in env_context.items():
-                cur.execute("set {}={}".format(k, v))
+            # not all query services (e.g. impala AIRFLOW-4434) support the set command
+            db = self.get_connection(self.hiveserver2_conn_id)
+            if db.extra_dejson.get('run_set_variable_statements', True):
+                env_context = get_context_from_env_var()
+                if hive_conf:
+                    env_context.update(hive_conf)
+                for k, v in env_context.items():
+                    cur.execute("set {}={}".format(k, v))
 
             for statement in hql:
                 cur.execute(statement)
