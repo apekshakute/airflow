@@ -227,8 +227,8 @@ salesforce = ['simple-salesforce>=0.72']
 samba = ['pysmbclient>=0.1.3']
 segment = ['analytics-python>=1.2.9']
 sendgrid = ['sendgrid>=5.2.0,<6']
-slack = ['slackclient>=1.0.0,<2.0.0']
-mongo = ['pymongo>=3.6.0', 'dnspython>=1.13.0,<2.0.0']
+slack = ['slackclient>=1.0.0']
+mongo = ['pymongo>=3.6.0']
 snowflake = ['snowflake-connector-python>=1.5.2',
              'snowflake-sqlalchemy>=1.1.0']
 ssh = ['paramiko>=2.1.1', 'pysftp>=0.2.9', 'sshtunnel>=0.1.4,<0.2']
@@ -244,7 +244,6 @@ all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant + druid + 
 devel = [
     'beautifulsoup4~=4.7.1',
     'click==6.7',
-    'contextdecorator;python_version<"3.4"',
     'freezegun',
     'jira',
     'mock;python_version<"3.3"',
@@ -295,6 +294,7 @@ def do_setup():
         scripts=['airflow/bin/airflow'],
         install_requires=[
             'alembic>=0.9, <1.0',
+            'cached_property~=1.5',
             'configparser>=3.5.0, <3.6.0',
             'croniter>=0.3.17, <0.4',
             'dill>=0.2.2, <0.3',
@@ -322,7 +322,7 @@ def do_setup():
             'python-dateutil>=2.3, <3',
             'requests>=2.20.0, <3',
             'setproctitle>=1.1.8, <2',
-            'sqlalchemy>=1.1.15, <1.3.0',
+            'sqlalchemy~=1.3',
             'tabulate>=0.7.5, <0.9',
             'tenacity==4.12.0',
             'text-unidecode==1.2',
