@@ -47,7 +47,8 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
         Returns a Google Cloud Storage service object.
         """
         if not self._conn:
-            self._conn = storage.Client(credentials=self._get_credentials())
+            cred = self._get_credentials()
+            self._conn = storage.Client(project=cred.project_id, credentials= cred)
 
         return self._conn
 
