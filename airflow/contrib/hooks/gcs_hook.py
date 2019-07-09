@@ -126,9 +126,9 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
             raise ValueError('source_bucket and source_object cannot be empty.')
 
         client = self.get_conn()
-        source_bucket = client.get_bucket(bucket_name=source_bucket)
+        source_bucket = client.get_bucket(source_bucket)
         source_object = source_bucket.blob(blob_name=source_object)
-        destination_bucket = client.get_bucket(bucket_name=destination_bucket)
+        destination_bucket = client.get_bucket(destination_bucket)
 
         token, bytes_rewritten, total_bytes = destination_bucket.blob(
             blob_name=destination_object).rewrite(
@@ -208,7 +208,7 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
                     filename = filename_gz
 
         client = self.get_conn()
-        bucket = client.get_bucket(bucket_name=bucket)
+        bucket = client.get_bucket(bucket)
         blob = bucket.blob(blob_name=object)
         blob.upload_from_filename(filename=filename,
                                   content_type=mime_type)
@@ -229,7 +229,7 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
         :type object: str
         """
         client = self.get_conn()
-        bucket = client.get_bucket(bucket_name=bucket)
+        bucket = client.get_bucket(bucket)
         blob = bucket.blob(blob_name=object)
         return blob.exists()
 
@@ -280,7 +280,7 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
             warnings.warn("'generation' parameter is no longer supported", DeprecationWarning)
 
         client = self.get_conn()
-        bucket = client.get_bucket(bucket_name=bucket)
+        bucket = client.get_bucket(bucket)
         blob = bucket.blob(blob_name=object)
         blob.delete()
 
@@ -347,7 +347,7 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
                       object,
                       bucket)
         client = self.get_conn()
-        bucket = client.get_bucket(bucket_name=bucket)
+        bucket = client.get_bucket(bucket)
         blob = bucket.get_blob(blob_name=object)
         blob.reload()
         blob_size = blob.size
@@ -367,7 +367,7 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
         self.log.info('Retrieving the crc32c checksum of '
                       'object: %s in bucket: %s', object, bucket)
         client = self.get_conn()
-        bucket = client.get_bucket(bucket_name=bucket)
+        bucket = client.get_bucket(bucket)
         blob = bucket.get_blob(blob_name=object)
         blob.reload()
         blob_crc32c = blob.crc32c
@@ -387,7 +387,7 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
         self.log.info('Retrieving the MD5 hash of '
                       'object: %s in bucket: %s', object, bucket)
         client = self.get_conn()
-        bucket = client.get_bucket(bucket_name=bucket)
+        bucket = client.get_bucket(bucket)
         blob = bucket.get_blob(blob_name=object)
         blob.reload()
         blob_md5hash = blob.md5_hash

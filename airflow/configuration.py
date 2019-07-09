@@ -35,8 +35,8 @@ import subprocess
 import sys
 import warnings
 
-from backports.configparser import ConfigParser, _UNSET, NoOptionError
-from zope.deprecation import deprecated as _deprecated
+from backports.configparser import ConfigParser, _UNSET, NoOptionError, NoSectionError
+from zope.deprecation import deprecated
 
 from airflow.exceptions import AirflowConfigException
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -144,6 +144,13 @@ class AirflowConfigParser(ConfigParser):
             'ssl_active': 'celery_ssl_active',
             'ssl_cert': 'celery_ssl_cert',
             'ssl_key': 'celery_ssl_key',
+            'elasticsearch_host': 'host',
+            'elasticsearch_log_id_template': 'log_id_template',
+            'elasticsearch_end_of_log_mark': 'end_of_log_mark',
+            'elasticsearch_frontend': 'frontend',
+            'elasticsearch_write_stdout': 'write_stdout',
+            'elasticsearch_json_format': 'json_format',
+            'elasticsearch_json_fields': 'json_fields'
         }
     }
 
@@ -296,7 +303,7 @@ class AirflowConfigParser(ConfigParser):
         elif val in ('f', 'false', '0'):
             return False
         else:
-            raise AirflowConfigException(
+            raise ValueError(
                 'The value for configuration option "{}:{}" is not a '
                 'boolean (received "{}").'.format(section, key, val))
 
@@ -321,7 +328,7 @@ class AirflowConfigParser(ConfigParser):
             # UNSET to avoid logging a warning about missing values
             self.get(section, option, fallback=_UNSET)
             return True
-        except NoOptionError:
+        except (NoOptionError, NoSectionError):
             return False
 
     def remove_option(self, section, option, remove_default=True):
@@ -374,9 +381,11 @@ class AirflowConfigParser(ConfigParser):
         return _section
 
     def as_dict(
-            self, display_source=False, display_sensitive=False, raw=False):
+            self, display_source=False, display_sensitive=False, raw=False,
+            include_env=True, include_cmds=True):
         """
         Returns the current configuration as an OrderedDict of OrderedDicts.
+
         :param display_source: If False, the option value is returned. If True,
             a tuple of (option_value, source) is returned. Source is either
             'airflow.cfg', 'default', 'env var', or 'cmd'.
@@ -388,6 +397,13 @@ class AirflowConfigParser(ConfigParser):
         :param raw: Should the values be output as interpolated values, or the
             "raw" form that can be fed back in to ConfigParser
         :type raw: bool
+        :param include_env: Should the value of configuration from AIRFLOW__
+            environment variables be included or not
+        :type include_env: bool
+        :param include_cmds: Should the result of calling any *_cmd config be
+            set (True, default), or should the _cmd options be left as the
+            command to run (False)
+        :type include_cmds: bool
         """
         cfg = {}
         configs = [
@@ -404,33 +420,35 @@ class AirflowConfigParser(ConfigParser):
                     sect[k] = val
 
         # add env vars and overwrite because they have priority
-        for ev in [ev for ev in os.environ if ev.startswith('AIRFLOW__')]:
-            try:
-                _, section, key = ev.split('__')
-                opt = self._get_env_var_option(section, key)
-            except ValueError:
-                continue
-            if not display_sensitive and ev != 'AIRFLOW__CORE__UNIT_TEST_MODE':
-                opt = '< hidden >'
-            elif raw:
-                opt = opt.replace('%', '%%')
-            if display_source:
-                opt = (opt, 'env var')
-            cfg.setdefault(section.lower(), OrderedDict()).update(
-                {key.lower(): opt})
-
-        # add bash commands
-        for (section, key) in self.as_command_stdout:
-            opt = self._get_cmd_option(section, key)
-            if opt:
-                if not display_sensitive:
+        if include_env:
+            for ev in [ev for ev in os.environ if ev.startswith('AIRFLOW__')]:
+                try:
+                    _, section, key = ev.split('__')
+                    opt = self._get_env_var_option(section, key)
+                except ValueError:
+                    continue
+                if not display_sensitive and ev != 'AIRFLOW__CORE__UNIT_TEST_MODE':
                     opt = '< hidden >'
-                if display_source:
-                    opt = (opt, 'cmd')
                 elif raw:
                     opt = opt.replace('%', '%%')
-                cfg.setdefault(section, OrderedDict()).update({key: opt})
-                del cfg[section][key + '_cmd']
+                if display_source:
+                    opt = (opt, 'env var')
+                cfg.setdefault(section.lower(), OrderedDict()).update(
+                    {key.lower(): opt})
+
+        # add bash commands
+        if include_cmds:
+            for (section, key) in self.as_command_stdout:
+                opt = self._get_cmd_option(section, key)
+                if opt:
+                    if not display_sensitive:
+                        opt = '< hidden >'
+                    if display_source:
+                        opt = (opt, 'cmd')
+                    elif raw:
+                        opt = opt.replace('%', '%%')
+                    cfg.setdefault(section, OrderedDict()).update({key: opt})
+                    del cfg[section][key + '_cmd']
 
         return cfg
 
@@ -616,7 +634,7 @@ set = conf.set # noqa
 
 for func in [load_test_config, get, getboolean, getfloat, getint, has_option,
              remove_option, as_dict, set]:
-    _deprecated(
+    deprecated(
         func,
         "Accessing configuration method '{f.__name__}' directly from "
         "the configuration module is deprecated. Please access the "

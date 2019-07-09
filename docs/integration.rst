@@ -424,6 +424,15 @@ Cloud Bigtable
 
 They also use :class:`airflow.contrib.hooks.gcp_bigtable_hook.BigtableHook` to communicate with Google Cloud Platform.
 
+Cloud Build
+'''''''''''
+
+:class:`airflow.contrib.operators.gcp_cloud_build_operator.CloudBuildCreateBuildOperator`
+     Starts a build with the specified configuration.
+
+
+They also use :class:`airflow.contrib.hooks.gcp_cloud_build_hook.CloudBuildHook` to communicate with Google Cloud Platform.
+
 
 Compute Engine
 ''''''''''''''
@@ -595,6 +604,9 @@ Cloud Storage
     increase in the number of objects for situations when many objects
     are being uploaded to a bucket with no formal success signal.
 
+:class:`airflow.contrib.operators.gcs_delete_operator.GoogleCloudStorageDeleteOperator`
+    Deletes objects from a Google Cloud Storage bucket.
+
 
 They also use :class:`airflow.contrib.hooks.gcs_hook.GoogleCloudStorageHook` to communicate with Google Cloud Platform.
 
@@ -674,6 +686,31 @@ Cloud Vision Product Search Operators
     Run safe search detection for an image
 
 They also use :class:`airflow.contrib.hooks.gcp_vision_hook.CloudVisionHook` to communicate with Google Cloud Platform.
+
+Cloud Text to Speech
+''''''''''''''''''''
+
+:class:`airflow.contrib.operators.gcp_text_to_speech_operator.GcpTextToSpeechSynthesizeOperator`
+    Synthesizes input text into audio file and stores this file to GCS.
+
+They also use :class:`airflow.contrib.hooks.gcp_text_to_speech_hook.GCPTextToSpeechHook` to communicate with Google Cloud Platform.
+
+Cloud Speech to Text
+''''''''''''''''''''
+
+:class:`airflow.contrib.operators.gcp_speech_to_text_operator.GcpSpeechToTextRecognizeSpeechOperator`
+    Recognizes speech in audio input and returns text.
+
+They also use :class:`airflow.contrib.hooks.gcp_speech_to_text_hook.GCPSpeechToTextHook` to communicate with Google Cloud Platform.
+
+Cloud Speech Translate Operators
+--------------------------------
+
+:class:`airflow.contrib.operators.gcp_translate_speech_operator.GcpTranslateSpeechOperator`
+    Recognizes speech in audio input and translates it.
+
+They also use :class:`airflow.contrib.hooks.gcp_speech_to_text_hook.GCPSpeechToTextHook` and
+    :class:`airflow.contrib.hooks.gcp_translate_hook.CloudTranslateHook` to communicate with Google Cloud Platform.
 
 Cloud Translate
 '''''''''''''''
