@@ -37,7 +37,7 @@ class KubernetesPodOperator(BaseOperator):
     :type cmds: list[str]
     :param arguments: arguments of the entrypoint. (templated)
         The docker image's CMD is used if this is not provided.
-    :type arguments: list of str
+    :type arguments: list[str]
     :param resources: Specify cpu and memory for a pod
     :type resources: Resources
     :param image_pull_policy: Specify a policy to cache or always pull an image
