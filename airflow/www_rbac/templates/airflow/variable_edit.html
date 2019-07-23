@@ -15,16 +15,15 @@
   limitations under the License.
 
 #}
-{% extends 'appbuilder/general/model/list.html' %}
+{% extends 'appbuilder/general/model/edit.html' %}
 
-{% block content %}
-  <form class="form-inline" action="{{ url_for('VariableModelView.varimport') }}" method=post enctype=multipart/form-data style="margin-top: 50px;">
-    {% if csrf_token %}
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-    {% endif %}
-    <input class="form-control-file" type="file" name="file">
-    <input class="btn btn-default" type="submit" value="Import Variables"/>
-  </form>
-  <hr/>
+{% block tail %}
   {{ super() }}
+  <style>
+    #val { font-family: monospace; }
+  </style>
+  <script>
+    const height = Math.min(window.innerHeight * 0.5, val.scrollHeight);
+    document.getElementById('val').style.height = `${height}px`;
+  </script>
 {% endblock %}

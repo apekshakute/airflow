@@ -144,13 +144,16 @@ class AirflowConfigParser(ConfigParser):
             'ssl_active': 'celery_ssl_active',
             'ssl_cert': 'celery_ssl_cert',
             'ssl_key': 'celery_ssl_key',
-            'elasticsearch_host': 'host',
-            'elasticsearch_log_id_template': 'log_id_template',
-            'elasticsearch_end_of_log_mark': 'end_of_log_mark',
-            'elasticsearch_frontend': 'frontend',
-            'elasticsearch_write_stdout': 'write_stdout',
-            'elasticsearch_json_format': 'json_format',
-            'elasticsearch_json_fields': 'json_fields'
+        },
+        'elasticsearch': {
+            'host': 'elasticsearch_host',
+            'log_id_template': 'elasticsearch_log_id_template',
+            'end_of_log_mark': 'elasticsearch_end_of_log_mark',
+            'frontend': 'elasticsearch_frontend',
+            'write_stdout': 'elasticsearch_write_stdout',
+            'json_format': 'elasticsearch_json_format',
+            'json_fields': 'elasticsearch_json_fields'
+
         }
     }
 
@@ -539,7 +542,13 @@ def parameterized_config(template):
     return template.format(**all_vars)
 
 
-TEST_CONFIG_FILE = AIRFLOW_HOME + '/unittests.cfg'
+def get_airflow_test_config(airflow_home):
+    if 'AIRFLOW_TEST_CONFIG' not in os.environ:
+        return os.path.join(airflow_home, 'unittests.cfg')
+    return expand_env_var(os.environ['AIRFLOW_TEST_CONFIG'])
+
+
+TEST_CONFIG_FILE = get_airflow_test_config(AIRFLOW_HOME)
 
 # only generate a Fernet key if we need to create a new config file
 if not os.path.isfile(TEST_CONFIG_FILE) or not os.path.isfile(AIRFLOW_CONFIG):
