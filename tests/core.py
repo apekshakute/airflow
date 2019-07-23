@@ -73,7 +73,7 @@ from pendulum import utcnow
 
 import six
 
-NUM_EXAMPLE_DAGS = 18
+NUM_EXAMPLE_DAGS = 19
 DEV_NULL = '/dev/null'
 TEST_DAG_FOLDER = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'dags')
@@ -1607,8 +1607,50 @@ class CliTests(unittest.TestCase):
         self.assertEqual('original', models.Variable.get('bar'))
         self.assertEqual('{"foo": "bar"}', models.Variable.get('foo'))
 
+        # Set a dict
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'dict', '{"foo": "oops"}']))
+        # Set a list
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'list', '["oops"]']))
+        # Set str
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'str', 'hello string']))
+        # Set int
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'int', '42']))
+        # Set float
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'float', '42.0']))
+        # Set true
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'true', 'true']))
+        # Set false
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'false', 'false']))
+        # Set none
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'null', 'null']))
+
+        # Export and then import
+        cli.variables(self.parser.parse_args([
+            'variables', '-e', 'variables3.json']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-i', 'variables3.json']))
+
+        # Assert value
+        self.assertEqual({'foo': 'oops'}, models.Variable.get('dict', deserialize_json=True))
+        self.assertEqual(['oops'], models.Variable.get('list', deserialize_json=True))
+        self.assertEqual('hello string', models.Variable.get('str'))  # cannot json.loads(str)
+        self.assertEqual(42, models.Variable.get('int', deserialize_json=True))
+        self.assertEqual(42.0, models.Variable.get('float', deserialize_json=True))
+        self.assertEqual(True, models.Variable.get('true', deserialize_json=True))
+        self.assertEqual(False, models.Variable.get('false', deserialize_json=True))
+        self.assertEqual(None, models.Variable.get('null', deserialize_json=True))
+
         os.remove('variables1.json')
         os.remove('variables2.json')
+        os.remove('variables3.json')
 
     def _wait_pidfile(self, pidfile):
         while True:
@@ -1793,6 +1835,12 @@ class WebUiTests(unittest.TestCase):
         self.runme_0 = self.dag_bash.get_task('runme_0')
         self.example_xcom = self.dagbag.dags['example_xcom']
 
+        session = Session()
+        session.query(models.DagRun).delete()
+        session.query(models.TaskInstance).delete()
+        session.commit()
+        session.close()
+
         self.dagrun_python = self.dag_python.create_dagrun(
             run_id="test_{}".format(models.DagRun.id_for_date(timezone.utcnow())),
             execution_date=EXAMPLE_DAG_DEFAULT_DATE,
@@ -1855,7 +1903,7 @@ class WebUiTests(unittest.TestCase):
 
         self.assertEqual('healthy', response_json['metadatabase']['status'])
         self.assertEqual('healthy', response_json['scheduler']['status'])
-        self.assertEqual(str(last_scheduler_heartbeat_for_testing_1),
+        self.assertEqual(last_scheduler_heartbeat_for_testing_1.isoformat(),
                          response_json['scheduler']['latest_scheduler_heartbeat'])
 
         session.query(BJ).\
@@ -1879,7 +1927,7 @@ class WebUiTests(unittest.TestCase):
 
         self.assertEqual('healthy', response_json['metadatabase']['status'])
         self.assertEqual('unhealthy', response_json['scheduler']['status'])
-        self.assertEqual(str(last_scheduler_heartbeat_for_testing_2),
+        self.assertEqual(last_scheduler_heartbeat_for_testing_2.isoformat(),
                          response_json['scheduler']['latest_scheduler_heartbeat'])
 
         session.query(BJ).\
@@ -1900,8 +1948,7 @@ class WebUiTests(unittest.TestCase):
 
         self.assertEqual('healthy', response_json['metadatabase']['status'])
         self.assertEqual('unhealthy', response_json['scheduler']['status'])
-        self.assertEqual('None',
-                         response_json['scheduler']['latest_scheduler_heartbeat'])
+        self.assertIsNone(response_json['scheduler']['latest_scheduler_heartbeat'])
 
         session.close()
 
@@ -1979,10 +2026,10 @@ class WebUiTests(unittest.TestCase):
         response = self.app.post("/admin/airflow/success", data=dict(
             task_id="print_the_context",
             dag_id="example_python_operator",
-            upstream="false",
-            downstream="false",
-            future="false",
-            past="false",
+            success_upstream="false",
+            success_downstream="false",
+            success_future="false",
+            success_past="false",
             execution_date=EXAMPLE_DAG_DEFAULT_DATE,
             origin="/admin"))
         self.assertIn("Wait a minute", response.data.decode('utf-8'))
@@ -2001,10 +2048,10 @@ class WebUiTests(unittest.TestCase):
         form = dict(
             task_id="section-1",
             dag_id="example_subdag_operator",
-            upstream="true",
-            downstream="true",
-            future="false",
-            past="false",
+            success_upstream="true",
+            success_downstream="true",
+            success_future="false",
+            success_past="false",
             execution_date=EXAMPLE_DAG_DEFAULT_DATE,
             origin="/admin")
         response = self.app.post("/admin/airflow/success", data=form)

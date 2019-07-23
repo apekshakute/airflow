@@ -189,10 +189,10 @@ class WorkerConfiguration(LoggingMixin):
         """Defines the security context"""
         security_context = {}
 
-        if self.kube_config.worker_run_as_user:
+        if self.kube_config.worker_run_as_user != "":
             security_context['runAsUser'] = self.kube_config.worker_run_as_user
 
-        if self.kube_config.worker_fs_group:
+        if self.kube_config.worker_fs_group != "":
             security_context['fsGroup'] = self.kube_config.worker_fs_group
 
         # set fs_group to 65533 if not explicitly specified and using git ssh keypair auth
@@ -200,6 +200,12 @@ class WorkerConfiguration(LoggingMixin):
             security_context['fsGroup'] = 65533
 
         return security_context
+
+    def _get_labels(self, kube_executor_labels, labels):
+        copy = self.kube_config.kube_labels.copy()
+        copy.update(kube_executor_labels)
+        copy.update(labels)
+        return copy
 
     def _get_volumes_and_mounts(self):
         def _construct_volume(name, claim, host):
@@ -332,13 +338,13 @@ class WorkerConfiguration(LoggingMixin):
             image_pull_policy=(kube_executor_config.image_pull_policy or
                                self.kube_config.kube_image_pull_policy),
             cmds=airflow_command,
-            labels={
+            labels=self._get_labels(kube_executor_config.labels, {
                 'airflow-worker': worker_uuid,
                 'dag_id': dag_id,
                 'task_id': task_id,
                 'execution_date': execution_date,
                 'try_number': str(try_number),
-            },
+            }),
             envs=self._get_environment(),
             secrets=self._get_secrets(),
             service_account_name=self.kube_config.worker_service_account_name,
